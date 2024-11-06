@@ -9,12 +9,13 @@ class WorkspaceScene extends Phaser.Scene {
   constructor() {
     super({ key: "WorkspaceScene" });
     this.gridSize = 64; // Size of each grid cell in pixels
-    this.colors = {
+     this.colors = {
       character: 0x4f46e5, // Indigo
       chair: 0x22c55e, // Green
       desk: 0xeab308, // Yellow
     };
     this.players = {};
+    this.chattingWith = null;
   }
 
   init(data) {
@@ -96,7 +97,12 @@ class WorkspaceScene extends Phaser.Scene {
       socket.on('update-positions', (positions) => {
         this.updatePlayerPositions(positions);
       });
-  
+      socket.on('chat-request', (senderId) => {
+        if (!this.chattingWith) {
+          this.chattingWith = senderId;
+          this.createChatButton();
+        }
+      });
       // Emit initial position to server
       socket.emit('set-initial-position', { x: this.playerContainer.x, y: this.playerContainer.y });
   }
@@ -153,7 +159,7 @@ class WorkspaceScene extends Phaser.Scene {
 
   update() {
     const speed = 4;
-    const initialPosition = { x: this.playerContainer.x, y: this.playerContainer.y };
+     const initialPosition = { x: this.playerContainer.x, y: this.playerContainer.y };
         if (this.cursors.left.isDown) {
       this.playerContainer.x -= speed;
       
@@ -189,7 +195,7 @@ class WorkspaceScene extends Phaser.Scene {
   }
 
 
-
+   
   updatePlayerPositions(positions) {
     Object.keys(positions).forEach((userId) => {
       if (userId === socket.id) return; // Skip our own player
@@ -202,11 +208,67 @@ class WorkspaceScene extends Phaser.Scene {
         // Update existing player’s position
         this.players[userId].x = positions[userId].x;
         this.players[userId].y = positions[userId].y;
+        this.checkProximity(userId, positions[userId]);
       }
     });
   }
-}
+  checkProximity(userId, position) {
+    const dist = Phaser.Math.Distance.Between(this.playerContainer.x, this.playerContainer.y, position.x, position.y);
+    if (dist < 64 && !this.chattingWith) {
+      this.chattingWith = userId;
+      socket.emit('request-chat', userId);
+    }
+  }
 
+  createChatButton() {
+    const chatButton = this.add.text(10, 10, 'Chat', { fontSize: '20px', backgroundColor: '#4f46e5', color: '#fff' })
+      .setInteractive()
+      .on('pointerdown', () => this.openChatModal());
+  }
+
+  openChatModal() {
+    this.scene.launch('ChatModal', { recipientId: this.chattingWith });
+  }
+
+}
+function ChatModal({ recipientId }) {
+    const [message, setMessage] = useState('');
+    const [messages, setMessages] = useState([]);
+  
+    useEffect(() => {
+      socket.on('receive-message', ({ senderId, message }) => {
+        setMessages((msgs) => [...msgs, { senderId, message }]);
+      });
+    }, []);
+  
+    const sendMessage = () => {
+      if (message) {
+        socket.emit('send-message', { recipientId, message });
+        setMessages((msgs) => [...msgs, { senderId: socket.id, message }]);
+        setMessage('');
+      }
+    };
+  
+    return (
+      <div className="chat-modal">
+        <div className="chat-history">
+          {messages.map((msg, i) => (
+            <div key={i} className={msg.senderId === socket.id ? 'my-message' : 'their-message'}>
+              {msg.message}
+            </div>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type a message..."
+        />
+        <button onClick={sendMessage}>Send</button>
+      </div>
+    );
+  }
+  
 export default function PhaserWorkspace({ workspaceData }) {
   const [isClient, setIsClient] = useState(false);
 
