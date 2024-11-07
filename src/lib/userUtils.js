@@ -1,5 +1,5 @@
 // src/lib/userUtils.js
-import connectToDatabase from './mongodb';
+import connectToDatabase from '../lib/mongodb';
 import User from '@/models/User';
 
 export async function storeUserInDatabase(auth0User) {
