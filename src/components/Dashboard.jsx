@@ -1,24 +1,68 @@
-'use client'
-
+"use client";
+import { linkAccount } from "../lib/authHelpers"; // Adjust path if needed
 import { useEffect, useState } from "react";
-import Link from "next/link"
-import Image from "next/image"
-import { motion } from "framer-motion"
-import { useCallback } from "react"
-import Particles from "react-tsparticles"
-import { loadSlim } from "tsparticles-slim"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PlusCircle, Settings, User } from "lucide-react"
-import { ClientDashboard } from "@/components/ClientDashboard"
+import { useAuth0 } from "@auth0/auth0-react";
+import Link from "next/link";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { useCallback } from "react";
+import Particles from "react-tsparticles";
+import { loadSlim } from "tsparticles-slim";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlusCircle, Settings, User } from "lucide-react";
+import { ClientDashboard } from "@/components/ClientDashboard";
 
 export default function Dashboard({ user }) {
-
   const particlesInit = useCallback(async (engine) => {
-    await loadSlim(engine)
-  }, [])
+    await loadSlim(engine);
+  }, []);
   const [workspaces, setWorkspaces] = useState([]);
+  const { isAuthenticated, loginWithPopup, getAccessTokenSilently } =
+    useAuth0();
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+  const [isGitHubLinked, setIsGitHubLinked] = useState(false);
+  console.log(process.env.NEXT_PUBLIC_AUTH0_DOMAIN);
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      const res = await fetch("/api/workspace");
+      const data = await res.json();
+      if (res.ok) setWorkspaces(data.workspaces);
+    };
 
+    const checkLinkedAccounts = async () => {
+      const token = await getAccessTokenSilently();
+      const res = await fetch(
+        `https://${process.env.NEXT_PUBLIC_AUTH0_DOMAIN}/api/v2/users/${user.sub}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const userProfile = await res.json();
+
+      setIsGoogleLinked(
+        userProfile.identities.some((id) => id.provider === "google-oauth2")
+      );
+      setIsGitHubLinked(
+        userProfile.identities.some((id) => id.provider === "github")
+      );
+    };
+
+    fetchWorkspaces();
+    if (isAuthenticated) checkLinkedAccounts();
+  }, [isAuthenticated, getAccessTokenSilently, user.sub]);
+  const handleLinkAccount = async (provider) => {
+    try {
+      await linkAccount(provider);
+      // Refresh the page to update the UI
+      window.location.reload();
+    } catch (error) {
+      console.error("Link account error:", error);
+      alert(error.message || "Failed to link account");
+    }
+  };
   useEffect(() => {
     const fetchWorkspaces = async () => {
       const res = await fetch("/api/workspace");
@@ -110,7 +154,11 @@ export default function Dashboard({ user }) {
           <h1 className="text-2xl font-bold mb-8">Dashboard</h1>
           <nav>
             <ClientDashboard />
-            <Button variant="ghost" className="w-full justify-start mb-4" asChild>
+            <Button
+              variant="ghost"
+              className="w-full justify-start mb-4"
+              asChild
+            >
               <Link href="/profile">
                 <User className="mr-2 h-4 w-4" /> Profile
               </Link>
@@ -119,6 +167,21 @@ export default function Dashboard({ user }) {
               <Link href="/settings">
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start mb-4"
+              onClick={() => handleLinkAccount("google-oauth2")}
+            >
+              {isGoogleLinked ? `Connected to Google` : `Link Google Account`}
+            </Button>
+
+            <Button
+              variant="ghost"
+              className="w-full justify-start mb-4"
+              onClick={() => handleLinkAccount("github")}
+            >
+              {isGitHubLinked ? `Connected to GitHub` : `Link GitHub Account`}
             </Button>
           </nav>
         </div>
@@ -131,7 +194,7 @@ export default function Dashboard({ user }) {
 
       <main className="flex-1 p-8 overflow-auto">
         <header className="flex justify-between items-center mb-8">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -139,7 +202,7 @@ export default function Dashboard({ user }) {
           >
             Welcome, {user.name}
           </motion.h1>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
@@ -157,28 +220,29 @@ export default function Dashboard({ user }) {
         <section>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold">Your Workspaces</h2>
-            
           </div>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
             {workspaces.map((workspace) => (
-          <WorkspaceCard key={workspace.id} workspace={workspace} />
-        ))}
+              <WorkspaceCard key={workspace.id} workspace={workspace} />
+            ))}
           </motion.div>
         </section>
       </main>
-
-     
     </div>
-  )
+  );
 }
 function WorkspaceCard({ workspace, isPlaceholder = false }) {
   return (
-    <Card className={`bg-white/10 backdrop-blur-lg border-none ${isPlaceholder ? 'opacity-50' : ''}`}>
+    <Card
+      className={`bg-white/10 backdrop-blur-lg border-none ${
+        isPlaceholder ? "opacity-50" : ""
+      }`}
+    >
       <CardHeader>
         <CardTitle className="flex items-center">
           {isPlaceholder ? (
@@ -193,18 +257,21 @@ function WorkspaceCard({ workspace, isPlaceholder = false }) {
       </CardHeader>
       <CardContent>
         {isPlaceholder ? (
-          <p className="text-sm opacity-70">Create a new workspace to start collaborating</p>
+          <p className="text-sm opacity-70">
+            Create a new workspace to start collaborating
+          </p>
         ) : (
-          <p className="text-sm opacity-70 mb-4">Last active: {new Date(workspace.createdAt).toLocaleString()}</p>
+          <p className="text-sm opacity-70 mb-4">
+            Last active: {new Date(workspace.createdAt).toLocaleString()}
+          </p>
         )}
-        <Link href={`/workspace/${workspace.id}`} >
-        
-        
-        <Button className="mt-4 w-full" variant={isPlaceholder ? "outline" : "default"}>
-          {isPlaceholder ? "Create Workspace" : 
-          
-          "Enter Workspace"}
-        </Button>
+        <Link href={`/workspace/${workspace.id}`}>
+          <Button
+            className="mt-4 w-full"
+            variant={isPlaceholder ? "outline" : "default"}
+          >
+            {isPlaceholder ? "Create Workspace" : "Enter Workspace"}
+          </Button>
         </Link>
       </CardContent>
     </Card>
