@@ -15,14 +15,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+// Fix the import path and casing
 const PhaserWorkspace = dynamic(() => import('../../../components/PhaserWorkSpace'), {
   ssr: false,
+  loading: () => (
+    <div className="w-full h-[600px] flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+        <p className="text-sm text-muted-foreground">Loading game environment...</p>
+      </div>
+    </div>
+  ),
 })
 
 export default function WorkspacePage() {
   const [workspace, setWorkspace] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState(1)
+  const [error, setError] = useState(null)
   
   const { id } = useParams()
   const { user, isLoading: userLoading } = useUser()
@@ -32,6 +42,7 @@ export default function WorkspacePage() {
 
     const fetchWorkspace = async () => {
       try {
+        setError(null)
         const response = await fetch(`/api/workspace`, {
           method: 'POST',
           headers: {
@@ -42,13 +53,23 @@ export default function WorkspacePage() {
           }),
         })
 
-        if (!response.ok) throw new Error('Failed to fetch workspace')
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to fetch workspace')
+        }
 
         const data = await response.json()
+        
+        // Validate workspace data
+        if (!data?.space?.width || !data?.space?.height) {
+          throw new Error('Invalid workspace data received')
+        }
+
         setWorkspace(data)
       } catch (error) {
         console.error('Error fetching workspace:', error)
-        toast.error('Failed to load workspace')
+        setError(error.message)
+        toast.error(error.message)
       } finally {
         setIsLoading(false)
       }
@@ -57,6 +78,7 @@ export default function WorkspacePage() {
     fetchWorkspace()
   }, [id])
 
+  // Handle loading state
   if (userLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
@@ -68,7 +90,28 @@ export default function WorkspacePage() {
     )
   }
 
-  if (!workspace) return null
+  // Handle error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <div className="bg-red-100 dark:bg-red-900/20 p-4 rounded-lg">
+            <p className="text-red-600 dark:text-red-400">{error}</p>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => window.location.reload()}
+            >
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Handle no workspace data
+  if (!workspace?.space) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
@@ -113,10 +156,20 @@ export default function WorkspacePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden border">
-          <PhaserWorkspace workspaceData={workspace.space} />
-        </div>
-      </main>
+  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden border">
+    <div className="p-4">
+      {workspace.space && (
+        <PhaserWorkspace 
+          workspaceData={workspace.space}
+          onError={(error) => {
+            console.error('Phaser error:', error)
+            toast.error('Error loading game environment')
+          }}
+        />
+      )}
+    </div>
+  </div>
+</main>
     </div>
   )
 }

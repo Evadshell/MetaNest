@@ -1,310 +1,590 @@
-"use client";
-// components/PhaserWorkspace.jsx
 import { useEffect, useState } from "react";
 import * as Phaser from "phaser";
 import io from 'socket.io-client';
 import { toast } from 'sonner';
-const socket = io('http://localhost:4000'); // Connect to Socket.IO server
+
 class WorkspaceScene extends Phaser.Scene {
   constructor() {
     super({ key: "WorkspaceScene" });
-    this.gridSize = 64; // Size of each grid cell in pixels
-     this.colors = {
-      character: 0x4f46e5, // Indigo
-      chair: 0x22c55e, // Green
-      desk: 0xeab308, // Yellow
+    this.gridSize = 64;
+    this.colors = {
+      character: 0x4f46e5,
+      chair: 0x22c55e,
+      desk: 0xeab308,
     };
-    this.players = {};
+    this.players = new Map();
     this.chattingWith = null;
+    this.socket = null;
+    this.isInitialized = false;
+    this.chatIndicators = new Map();
+    this.connectionRetries = 0;
+    this.maxRetries = 5;
+    this.lastPosition = null; // Track last valid position
+
   }
 
   init(data) {
+    if (!data || !data.width || !data.height) {
+      console.error('Invalid workspace data:', data);
+      data = { width: 10, height: 10 }; // Fallback dimensions
+    }
     this.workspaceData = data;
-    this.furniture = new Map(); // Track placed furniture
+    this.furniture = new Map();
+    this.isInitialized = false;
   }
 
-  create() {
-    const { width, height } = this.workspaceData;
 
-    // Create grid
+  create() {
+    // Grid creation code remains the same...
     const graphics = this.add.graphics();
     graphics.lineStyle(1, 0xcccccc, 0.5);
 
-    // Draw vertical lines
+    const width = this.workspaceData?.width || 10;
+    const height = this.workspaceData?.height || 10;
+
     for (let x = 0; x <= width; x++) {
       graphics.moveTo(x * this.gridSize, 0);
       graphics.lineTo(x * this.gridSize, height * this.gridSize);
     }
 
-    // Draw horizontal lines
     for (let y = 0; y <= height; y++) {
       graphics.moveTo(0, y * this.gridSize);
       graphics.lineTo(width * this.gridSize, y * this.gridSize);
     }
     graphics.strokePath();
 
-    // Add player character (circle with avatar or initial)
-    const characterX = this.gridSize / 2;
-    const characterY = this.gridSize / 2;
+    // Create player
+    this.createPlayer();
 
-    // Create character circle
+    // this.player = this.add.graphics();
+    // this.player.fillStyle(this.colors.character);
+    // this.player.fillCircle(0, 0, this.gridSize / 3);
+
+    // this.playerContainer = this.add.container(this.gridSize / 2, this.gridSize / 2, [this.player]);
+
+    // const playerText = this.add.text(0, 0, "👤", {
+    //   fontSize: "24px",
+    //   color: "#FFFFFF",
+    // });
+    // playerText.setOrigin(0.5, 0.5);
+    // this.playerContainer.add(playerText);
+
+    // Initialize socket and keyboard
+    this.initializeSocket();
+    this.cursors = this.input.keyboard.createCursorKeys();
+
+    this.isInitialized = true;
+  }
+  createPlayer() {
+    // Create player graphics
     this.player = this.add.graphics();
     this.player.fillStyle(this.colors.character);
     this.player.fillCircle(0, 0, this.gridSize / 3);
 
-    // Add player container (for easier movement)
-    this.playerContainer = this.add.container(characterX, characterY, [
-      this.player,
-    ]);
-
-    // Add character text (could be initial or emoji)
-    const characterText = this.add.text(0, 0, "👤", {
+    // Initial position at center of first grid cell
+    const initialX = Math.max(this.gridSize / 2, 0);
+    const initialY = Math.max(this.gridSize / 2, 0);
+    
+    this.playerContainer = this.add.container(initialX, initialY, [this.player]);
+    this.lastPosition = {
+      x: initialX,
+      y: initialY
+    };
+    const playerText = this.add.text(0, 0, "👤", {
       fontSize: "24px",
       color: "#FFFFFF",
     });
-    characterText.setOrigin(0.5, 0.5);
-    this.playerContainer.add(characterText);
-   
-    // Enable keyboard input
-    this.cursors = this.input.keyboard.createCursorKeys();
+    playerText.setOrigin(0.5, 0.5);
+    this.playerContainer.add(playerText);
+  }
 
-    // Add furniture placement functionality
-    this.input.keyboard.on("keydown-C", () => this.placeFurniture("chair"));
-    this.input.keyboard.on("keydown-D", () => this.placeFurniture("desk"));
+  validatePosition(position) {
+    if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') {
+      return false;
+    }
+    if (isNaN(position.x) || isNaN(position.y)) {
+      return false;
+    }
+    return true;
+  }
+  initializeSocket() {
+    if (this.socket?.connected) {
+      console.log('Socket already connected');
+      return;
+    }
 
-    // Add click listener for furniture placement
-    this.input.on("pointerdown", (pointer) => {
-      if (this.selectedFurniture) {
-        const gridX = Math.floor(pointer.x / this.gridSize);
-        const gridY = Math.floor(pointer.y / this.gridSize);
-        this.placeFurnitureAt(this.selectedFurniture, gridX, gridY);
-        this.selectedFurniture = null; // Reset selection
+    console.log('Initializing socket connection...');
+    
+    this.socket = io('http://localhost:4000', {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      transports: ['websocket'],
+      timeout: 10000
+    });
+
+    this.setupSocketListeners();
+    // this.socket = io('http://localhost:4000', {
+    //   reconnection: true,
+    //   reconnectionAttempts: 5,
+    //   reconnectionDelay: 1000,
+    //   transports: ['websocket']
+    // });
+
+    // this.socket.on('connect', () => {
+    //   console.log('Connected to server');
+    //   this.socket.emit('set-initial-position', {
+    //     x: this.playerContainer.x,
+    //     y: this.playerContainer.y
+    //   });
+    // });
+
+    // this.socket.on('user-joined', ({ userId, totalUsers }) => {
+    //   toast.success(`New user joined! Total users: ${totalUsers}`);
+    // });
+
+    // this.socket.on('user-left', ({ userId }) => {
+    //   this.removePlayer(userId);
+    // });
+
+    // this.socket.on('update-positions', (positions) => {
+    //   this.updatePlayerPositions(positions);
+    // });
+
+    // this.socket.on('chat-request', ({ senderId }) => {
+    //   this.handleChatRequest(senderId);
+    // });
+
+    // this.socket.on('connect_error', (error) => {
+    //   console.error('Connection error:', error);
+    //   toast.error('Failed to connect to server');
+    // });
+  }
+  setupSocketListeners() {
+    this.socket.on('connect', () => {
+      console.log('Connected to server with ID:', this.socket.id);
+      this.connectionRetries = 0;
+      
+      // Send initial position once connected
+      const position = {
+        x: this.playerContainer.x,
+        y: this.playerContainer.y
+      };
+      console.log('Sending initial position:', position);
+      this.socket.emit('set-initial-position', position);
+      
+      toast.success('Connected to server!');
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      this.connectionRetries++;
+      
+      if (this.connectionRetries >= this.maxRetries) {
+        toast.error('Failed to connect to server after multiple attempts');
+        this.socket.disconnect();
+      } else {
+        toast.error(`Connection error (attempt ${this.connectionRetries}/${this.maxRetries})`);
       }
     });
 
-    // Add instructions text
-    this.add.text(
-      10,
-      height * this.gridSize + 10,
-      "Controls: Arrow Keys to move | Press C for Chair | Press D for Desk | Click to place furniture",
-      { fontSize: "14px", fill: "#666" }
-    );
-    socket.on('user-joined', (userId) => {
-        toast(`User ${userId} joined the workspace!`, { type: 'success' });
-      });
-  
-      // Listen for updates to all players' positions
-      socket.on('update-positions', (positions) => {
-        this.updatePlayerPositions(positions);
-      });
-      socket.on('chat-request', (senderId) => {
-        if (!this.chattingWith) {
-          this.chattingWith = senderId;
-          this.createChatButton();
-        }
-      });
-      // Emit initial position to server
-      socket.emit('set-initial-position', { x: this.playerContainer.x, y: this.playerContainer.y });
+    this.socket.on('disconnect', (reason) => {
+      console.log('Disconnected from server:', reason);
+      toast.error(`Disconnected from server: ${reason}`);
+      
+      if (reason === 'io server disconnect') {
+        // Server disconnected us, retry connection
+        this.socket.connect();
+      }
+    });
+
+    this.socket.on('user-joined', ({ userId, totalUsers }) => {
+      console.log('User joined:', userId, 'Total users:', totalUsers);
+      toast.success(`New user joined! Total users: ${totalUsers}`);
+    });
+
+    this.socket.on('user-left', ({ userId, totalUsers }) => {
+      console.log('User left:', userId, 'Total users:', totalUsers);
+      this.removePlayer(userId);
+      toast.info(`User left. Total users: ${totalUsers}`);
+    });
+
+    this.socket.on('update-positions', (positions) => {
+      console.log('Received positions update:', positions);
+      this.updatePlayerPositions(positions);
+    });
+
+    this.socket.on('chat-request', ({ senderId }) => {
+      console.log('Received chat request from:', senderId);
+      this.handleChatRequest(senderId);
+    });
   }
 
-  placeFurniture(type) {
-    this.selectedFurniture = type;
-  }
-
-  placeFurnitureAt(type, gridX, gridY) {
-    const key = `${gridX},${gridY}`;
-
-    // Remove existing furniture at this position
-    if (this.furniture.has(key)) {
-      this.furniture.get(key).forEach((obj) => obj.destroy());
-      this.furniture.delete(key);
+  handleChatRequest(senderId) {
+    // Remove existing chat indicator if any
+    if (this.chatIndicators.has(senderId)) {
+      this.chatIndicators.get(senderId).destroy();
+      this.chatIndicators.delete(senderId);
     }
 
-    // Create new furniture
-    const x = gridX * this.gridSize + this.gridSize / 2;
-    const y = gridY * this.gridSize + this.gridSize / 2;
+    const player = this.players.get(senderId);
+    if (player) {
+      const chatContainer = this.add.container(player.x, player.y - 40);
+      
+      // Add chat bubble background
+      const bubble = this.add.graphics();
+      bubble.fillStyle(0xFFFFFF, 0.9);
+      bubble.lineStyle(2, 0x4f46e5);
+      bubble.fillRoundedRect(-30, -15, 60, 30, 8);
+      bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
+      
+      // Add chat icon
+      const chatIcon = this.add.text(0, 0, "💬", {
+        fontSize: "20px"
+      });
+      chatIcon.setOrigin(0.5, 0.5);
+      
+      chatContainer.add([bubble, chatIcon]);
+      chatContainer.setDepth(1000);
+      chatContainer.setInteractive(new Phaser.Geom.Rectangle(-30, -15, 60, 30), Phaser.Geom.Rectangle.Contains);
+      
+      chatContainer.on('pointerdown', () => {
+        this.game.events.emit('startChat', senderId);
+        chatContainer.destroy();
+        this.chatIndicators.delete(senderId);
+      });
 
-    const circle = this.add.graphics();
-    circle.fillStyle(this.colors[type]);
-    circle.fillCircle(x, y, this.gridSize / 3);
+      chatContainer.on('pointerover', () => {
+        bubble.clear();
+        bubble.fillStyle(0xE8E8E8, 0.9);
+        bubble.lineStyle(2, 0x4f46e5);
+        bubble.fillRoundedRect(-30, -15, 60, 30, 8);
+        bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
+      });
 
-    const letter = this.add.text(x, y, type === "chair" ? "C" : "D", {
-      fontSize: "20px",
-      color: "#FFFFFF",
-    });
-    letter.setOrigin(0.5, 0.5);
+      chatContainer.on('pointerout', () => {
+        bubble.clear();
+        bubble.fillStyle(0xFFFFFF, 0.9);
+        bubble.lineStyle(2, 0x4f46e5);
+        bubble.fillRoundedRect(-30, -15, 60, 30, 8);
+        bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
+      });
 
-    this.furniture.set(key, [circle, letter]);
-
-    // Save furniture placement to database
-    this.saveFurniturePlacement(type, gridX, gridY);
+      this.chatIndicators.set(senderId, chatContainer);
+    }
   }
 
-  async saveFurniturePlacement(type, x, y) {
-    try {
-      await fetch("/api/workspaceFurniture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          spaceId: this.workspaceData.id,
-          elementId: type,
-          x,
-          y,
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to save furniture placement:", error);
+  removePlayer(userId) {
+    if (this.players.has(userId)) {
+      this.players.get(userId).destroy();
+      this.players.delete(userId);
+    }
+    if (this.chatIndicators.has(userId)) {
+      this.chatIndicators.get(userId).destroy();
+      this.chatIndicators.delete(userId);
+    }
+  }
+
+  updatePlayerPositions(positions) {
+    Object.entries(positions).forEach(([userId, position]) => {
+      if (!position || userId === this.socket.id) return;
+
+      if (!this.players.has(userId)) {
+        // Create new player
+        const playerGraphics = this.add.graphics();
+        playerGraphics.fillStyle(0x00ff00);
+        playerGraphics.fillCircle(0, 0, this.gridSize / 3);
+
+        const container = this.add.container(position.x, position.y, [playerGraphics]);
+        const playerText = this.add.text(0, 0, "👤", {
+          fontSize: "24px",
+          color: "#FFFFFF",
+        });
+        playerText.setOrigin(0.5, 0.5);
+        container.add(playerText);
+
+        this.players.set(userId, container);
+      } else {
+        // Update existing player position
+        const player = this.players.get(userId);
+        player.setPosition(position.x, position.y);
+        
+        // Update chat indicator position if it exists
+        if (this.chatIndicators.has(userId)) {
+          const indicator = this.chatIndicators.get(userId);
+          indicator.setPosition(position.x, position.y - 40);
+        }
+        
+        this.checkProximity(userId, position);
+      }
+    });
+  }
+
+  checkProximity(userId, position) {
+    const dist = Phaser.Math.Distance.Between(
+      this.playerContainer.x,
+      this.playerContainer.y,
+      position.x,
+      position.y
+    );
+
+    if (dist < this.gridSize * 2 && !this.chatIndicators.has(userId)) {
+      this.socket.emit('request-chat', userId);
     }
   }
 
   update() {
+    if (!this.isInitialized || !this.socket?.connected || !this.playerContainer) return;
+
     const speed = 4;
-     const initialPosition = { x: this.playerContainer.x, y: this.playerContainer.y };
-        if (this.cursors.left.isDown) {
-      this.playerContainer.x -= speed;
-      
+    let moved = false;
+    const currentPosition = {
+      x: this.playerContainer.x,
+      y: this.playerContainer.y
+    };
+
+    // Calculate new position based on input
+    let newX = currentPosition.x;
+    let newY = currentPosition.y;
+
+    if (this.cursors.left.isDown) {
+      newX -= speed;
+      moved = true;
     } else if (this.cursors.right.isDown) {
-      this.playerContainer.x += speed;
-      
+      newX += speed;
+      moved = true;
     }
 
     if (this.cursors.up.isDown) {
-      this.playerContainer.y -= speed;
-      
+      newY -= speed;
+      moved = true;
     } else if (this.cursors.down.isDown) {
-      this.playerContainer.y += speed;
+      newY += speed;
+      moved = true;
+    }
+
+    const maxX = (this.workspaceData.width * this.gridSize) - (this.gridSize / 2);
+    const maxY = (this.workspaceData.height * this.gridSize) - (this.gridSize / 2);
+
+    newX = Phaser.Math.Clamp(newX, this.gridSize / 2, maxX);
+    newY = Phaser.Math.Clamp(newY, this.gridSize / 2, maxY);
+
+    // Update position if it's valid and different from current
+    if (!isNaN(newX) && !isNaN(newY) && 
+        (newX !== currentPosition.x || newY !== currentPosition.y)) {
       
-    }
-    if (
-        initialPosition.x !== this.playerContainer.x ||
-        initialPosition.y !== this.playerContainer.y
-      ) {
-        socket.emit('move', { x: this.playerContainer.x, y: this.playerContainer.y });
+      this.playerContainer.setPosition(newX, newY);
+      
+      const newPosition = {
+        x: newX,
+        y: newY
+      };
+
+      // Only emit if position is valid and has changed
+      if (this.validatePosition(newPosition) && 
+          this.socket?.connected && 
+          moved) {
+        console.log('Emitting validated move:', newPosition);
+        this.socket.emit('move', newPosition);
+        this.lastPosition = newPosition;
       }
-    // Keep player within bounds
-    this.playerContainer.x = Phaser.Math.Clamp(
-      this.playerContainer.x,
-      this.gridSize / 2,
-      this.workspaceData.width * this.gridSize - this.gridSize / 2
-    );
-    this.playerContainer.y = Phaser.Math.Clamp(
-      this.playerContainer.y,
-      this.gridSize / 2,
-      this.workspaceData.height * this.gridSize - this.gridSize / 2
-    );
-  }
-
-
-   
-  updatePlayerPositions(positions) {
-    Object.keys(positions).forEach((userId) => {
-      if (userId === socket.id) return; // Skip our own player
-
-      if (!this.players[userId]) {
-        // Create a new player if they don’t exist yet
-        const player = this.add.circle(positions[userId].x, positions[userId].y, 10, 0x00ff00);
-        this.players[userId] = player;
-      } else {
-        // Update existing player’s position
-        this.players[userId].x = positions[userId].x;
-        this.players[userId].y = positions[userId].y;
-        this.checkProximity(userId, positions[userId]);
-      }
-    });
-  }
-  checkProximity(userId, position) {
-    const dist = Phaser.Math.Distance.Between(this.playerContainer.x, this.playerContainer.y, position.x, position.y);
-    if (dist < 64 && !this.chattingWith) {
-      this.chattingWith = userId;
-      socket.emit('request-chat', userId);
+    } else if (this.lastPosition && 
+              (isNaN(newX) || isNaN(newY))) {
+      // Restore last valid position if new position is invalid
+      this.playerContainer.setPosition(this.lastPosition.x, this.lastPosition.y);
     }
-  }
 
-  createChatButton() {
-    const chatButton = this.add.text(10, 10, 'Chat', { fontSize: '20px', backgroundColor: '#4f46e5', color: '#fff' })
-      .setInteractive()
-      .on('pointerdown', () => this.openChatModal());
-  }
 
-  openChatModal() {
-    this.scene.launch('ChatModal', { recipientId: this.chattingWith });
   }
-
 }
-function ChatModal({ recipientId }) {
-    const [message, setMessage] = useState('');
-    const [messages, setMessages] = useState([]);
-  
-    useEffect(() => {
-      socket.on('receive-message', ({ senderId, message }) => {
-        setMessages((msgs) => [...msgs, { senderId, message }]);
-      });
-    }, []);
-  
-    const sendMessage = () => {
-      if (message) {
-        socket.emit('send-message', { recipientId, message });
-        setMessages((msgs) => [...msgs, { senderId: socket.id, message }]);
-        setMessage('');
-      }
-    };
-  
-    return (
-      <div className="chat-modal">
-        <div className="chat-history">
-          {messages.map((msg, i) => (
-            <div key={i} className={msg.senderId === socket.id ? 'my-message' : 'their-message'}>
-              {msg.message}
-            </div>
-          ))}
-        </div>
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type a message..."
-        />
-        <button onClick={sendMessage}>Send</button>
-      </div>
-    );
-  }
-  
-export default function PhaserWorkspace({ workspaceData }) {
-  const [isClient, setIsClient] = useState(false);
+
+const ChatModal = ({ recipientId, onClose }) => {
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // Check if we're in the browser
-    if (typeof window !== "undefined") {
-      setIsClient(true);
-    }
+    const newSocket = io('http://localhost:4000', {
+      transports: ['websocket']
+    });
+    
+    setSocket(newSocket);
+
+    newSocket.on('receive-message', ({ senderId, message }) => {
+      setMessages(prev => [...prev, { senderId, message, timestamp: new Date() }]);
+    });
+
+    return () => newSocket.disconnect();
+  }, []);
+
+  const sendMessage = () => {
+    if (!message.trim() || !socket) return;
+    
+    socket.emit('send-message', { recipientId, message });
+    setMessages(prev => [...prev, { 
+      senderId: socket.id, 
+      message,
+      timestamp: new Date()
+    }]);
+    setMessage('');
+  };
+
+  return (
+    <div className="fixed bottom-4 right-4 w-80 bg-white rounded-lg shadow-xl border border-gray-200">
+      <div className="p-4 border-b flex justify-between items-center bg-primary text-white rounded-t-lg">
+        <h3 className="font-semibold">Chat</h3>
+        <button 
+          onClick={onClose}
+          className="hover:bg-primary-dark rounded-full w-6 h-6 flex items-center justify-center"
+        >
+          ×
+        </button>
+      </div>
+      <div className="h-96 overflow-y-auto p-4 space-y-2">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.senderId === socket?.id ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] px-4 py-2 rounded-lg ${
+              msg.senderId === socket?.id 
+                ? 'bg-primary text-white rounded-tr-none' 
+                : 'bg-gray-100 rounded-tl-none'
+            }`}>
+              {msg.message}
+              <div className={`text-xs mt-1 ${msg.senderId === socket?.id ? 'text-primary-100' : 'text-gray-500'}`}>
+                {new Date(msg.timestamp).toLocaleTimeString()}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 border-t">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+          <button
+            onClick={sendMessage}
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark transition-colors"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function PhaserWorkspace({ workspaceData }) {
+  const [isClient, setIsClient] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatRecipient, setChatRecipient] = useState(null);
+  const [gameInstance, setGameInstance] = useState(null);
+
+  useEffect(() => {
+    setIsClient(typeof window !== "undefined");
   }, []);
 
   useEffect(() => {
     if (!isClient) return;
 
+    const handleResize = () => {
+      if (gameInstance) {
+        const container = document.getElementById("phaser-container");
+        if (!container) return;
+
+        const parent = container.parentElement;
+        if (!parent) return;
+
+        // Get available space
+        const availableWidth = parent.clientWidth - 32; // Account for padding
+        const availableHeight = window.innerHeight - 200; // Account for header and margins
+
+        // Calculate scale to fit
+        const scaleX = availableWidth / (workspaceData.width * 64);
+        const scaleY = availableHeight / (workspaceData.height * 64);
+        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 1
+
+        // Update game size
+        gameInstance.scale.resize(workspaceData.width * 64, workspaceData.height * 64);
+        gameInstance.scale.setZoom(scale);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isClient, gameInstance, workspaceData]);
+
+  useEffect(() => {
+    if (!isClient || !workspaceData) return;
+
+    console.log('Initializing Phaser game with workspace data:', workspaceData);
+
     const config = {
       type: Phaser.AUTO,
       parent: "phaser-container",
       width: workspaceData.width * 64,
-      height: workspaceData.height * 64 + 40, // Extra height for instructions
-      scene: WorkspaceScene,
+      height: workspaceData.height * 64,
       backgroundColor: "#FFFFFF",
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        parent: "phaser-container",
+      },
+      scene: WorkspaceScene
     };
 
     const game = new Phaser.Game(config);
-    game.scene.start("WorkspaceScene", workspaceData);
+    setGameInstance(game);
+
+    game.events.on('startChat', (userId) => {
+      console.log('Starting chat with user:', userId);
+      setChatRecipient(userId);
+      setShowChat(true);
+    });
+
+    // Handle resize after a short delay to ensure proper initialization
+    setTimeout(() => {
+      const container = document.getElementById("phaser-container");
+      if (container) {
+        const parent = container.parentElement;
+        if (parent) {
+          const availableWidth = parent.clientWidth - 32;
+          const availableHeight = window.innerHeight - 200;
+          const scaleX = availableWidth / (workspaceData.width * 64);
+          const scaleY = availableHeight / (workspaceData.height * 64);
+          const scale = Math.min(scaleX, scaleY, 1);
+          game.scale.setZoom(scale);
+        }
+      }
+    }, 100);
 
     return () => {
+      console.log('Cleaning up Phaser game');
       game.destroy(true);
-     };
+    };
   }, [isClient, workspaceData]);
 
   if (!isClient) return null;
 
   return (
-    <div
-      id="phaser-container"
-      className="border rounded-lg shadow-lg bg-white"
+    <div className="relative w-full h-full flex items-center justify-center">
+    <div 
+      id="phaser-container" 
+      className="aspect-square w-full max-w-[800px] bg-white rounded-lg shadow-lg"
     />
+    {showChat && (
+      <ChatModal
+        recipientId={chatRecipient}
+        onClose={() => {
+          setShowChat(false);
+          setChatRecipient(null);
+        }}
+      />
+    )}
+  </div>
   );
 }
