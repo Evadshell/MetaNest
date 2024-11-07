@@ -6,15 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    //     const { id } = req.nextUrl.pathname.split('/').pop() // Extract ID from URL
-    // const hehe= req.body;
-    // console.log(id);
-    // console.log(hehe);
     const { id } = await req.json();
-    // Connect to the database
     await connectToDatabase();
 
-    // Fetch the workspace by ID
     const space = await Space.findOne({ id });
     if (!space) {
       return NextResponse.json(
@@ -31,6 +25,20 @@ export async function POST(req) {
     console.error("Workspace fetch error:", error);
     return NextResponse.json(
       { error: "Failed to fetch workspace" },
+      { status: 500 }
+    );
+  }
+}
+export async function GET() {
+  try {
+    await connectToDatabase();
+
+    const workspaces = await Space.find({});
+    return NextResponse.json({ workspaces }, { status: 200 });
+  } catch (error) {
+    console.error("Failed to fetch workspaces:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch workspaces" },
       { status: 500 }
     );
   }

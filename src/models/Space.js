@@ -11,3 +11,4 @@ const SpaceSchema = new mongoose.Schema({
 });
 
 export default mongoose.models?.Space || mongoose.model("Space", SpaceSchema);
+//TODO: add that team members list and last active currently active and all features

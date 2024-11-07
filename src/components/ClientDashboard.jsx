@@ -11,8 +11,7 @@ export function ClientDashboard({  }) {
   return (
     <div>
       <Button
-        className="bg-green-500 hover:bg-green-600 text-white"
-        onClick={() => setIsCreateModalOpen(true)}
+variant="ghost" className="w-full justify-start mb-4"        onClick={() => setIsCreateModalOpen(true)}
       >
         <PlusCircle className="mr-2 h-4 w-4" /> Create Workspace
       </Button>
