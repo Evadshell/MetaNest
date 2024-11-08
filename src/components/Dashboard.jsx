@@ -1,3 +1,5 @@
+
+//TODO: creaqte a section of youtr workspace and team 
 "use client";
 import { linkAccount } from "../lib/authHelpers"; // Adjust path if needed
 import { useEffect, useState } from "react";
@@ -12,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlusCircle, Settings, User } from "lucide-react";
 import { ClientDashboard } from "@/components/ClientDashboard";
-
+import { AccountLinkButton } from "@/components/AccountLinkButton";
 export default function Dashboard({ user }) {
   const particlesInit = useCallback(async (engine) => {
     await loadSlim(engine);
@@ -168,21 +170,17 @@ export default function Dashboard({ user }) {
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start mb-4"
-              onClick={() => handleLinkAccount("google-oauth2")}
-            >
-              {isGoogleLinked ? `Connected to Google` : `Link Google Account`}
-            </Button>
+            <AccountLinkButton
+              provider="google-oauth2"
+              isLinked={isGoogleLinked}
+              onLink={() => setIsGoogleLinked(true)}
+            />
 
-            <Button
-              variant="ghost"
-              className="w-full justify-start mb-4"
-              onClick={() => handleLinkAccount("github")}
-            >
-              {isGitHubLinked ? `Connected to GitHub` : `Link GitHub Account`}
-            </Button>
+            <AccountLinkButton
+              provider="github"
+              isLinked={isGitHubLinked}
+              onLink={() => setIsGitHubLinked(true)}
+            />
           </nav>
         </div>
         <div>

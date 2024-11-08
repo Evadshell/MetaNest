@@ -13,10 +13,8 @@ class WorkspaceScene extends Phaser.Scene {
       desk: 0xeab308,
     };
     this.players = new Map();
-    this.chattingWith = null;
     this.socket = null;
     this.isInitialized = false;
-    this.chatIndicators = new Map();
     this.connectionRetries = 0;
     this.maxRetries = 5;
     this.lastPosition = null; // Track last valid position
@@ -170,76 +168,8 @@ class WorkspaceScene extends Phaser.Scene {
       console.log("Received positions update:", positions);
       this.updatePlayerPositions(positions);
     });
-
-    this.socket.on("chat-request", ({ senderId }) => {
-      console.log("Received chat request from:", senderId);
-      this.handleChatRequest(senderId);
-    });
   }
 
-  handleChatRequest(senderId) {
-    // Remove existing chat indicator if any
-    if (this.chatIndicators.has(senderId)) {
-      this.chatIndicators.get(senderId).destroy();
-      this.chatIndicators.delete(senderId);
-    }
-
-    const player = this.players.get(senderId);
-    if (player) {
-      const chatContainer = this.add.container(player.x, player.y - 40);
-
-      // Add chat bubble background
-      const bubble = this.add.graphics();
-      bubble.fillStyle(0xffffff, 0.9);
-      bubble.lineStyle(2, 0x4f46e5);
-      bubble.fillRoundedRect(-30, -15, 60, 30, 8);
-      bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
-
-      // Add chat icon
-      const chatIcon = this.add.text(0, 0, "💬", {
-        fontSize: "20px",
-      });
-      chatIcon.setOrigin(0.5, 0.5);
-
-      chatContainer.add([bubble, chatIcon]);
-      chatContainer.setDepth(1000);
-      chatContainer.setInteractive(
-        new Phaser.Geom.Rectangle(-30, -15, 60, 30),
-        Phaser.Geom.Rectangle.Contains
-      );
-
-      chatContainer.on("pointerdown", () => {
-        this.game.events.emit(
-          "startChat",
-          senderId,
-          this.generateChatSessionId(senderId)
-        );
-        chatContainer.destroy();
-        this.chatIndicators.delete(senderId);
-      });
-
-      chatContainer.on("pointerover", () => {
-        bubble.clear();
-        bubble.fillStyle(0xe8e8e8, 0.9);
-        bubble.lineStyle(2, 0x4f46e5);
-        bubble.fillRoundedRect(-30, -15, 60, 30, 8);
-        bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
-      });
-
-      chatContainer.on("pointerout", () => {
-        bubble.clear();
-        bubble.fillStyle(0xffffff, 0.9);
-        bubble.lineStyle(2, 0x4f46e5);
-        bubble.fillRoundedRect(-30, -15, 60, 30, 8);
-        bubble.strokeRoundedRect(-30, -15, 60, 30, 8);
-      });
-
-      this.chatIndicators.set(senderId, chatContainer);
-    }
-  }
-  generateChatSessionId(senderId) {
-    return `chat-${this.socket.id}-${senderId}`;
-  }
   removePlayer(userId) {
     if (this.players.has(userId)) {
       this.players.get(userId).destroy();
@@ -253,55 +183,39 @@ class WorkspaceScene extends Phaser.Scene {
 
   updatePlayerPositions(positions) {
     Object.entries(positions).forEach(([userId, position]) => {
-      if(position) {
+      if (position) {
+        if (!position || userId === this.socket.id) return;
 
-      
-      if (!position || userId === this.socket.id) return;
+        if (!this.players.has(userId)) {
+          // Create new player
+          const playerGraphics = this.add.graphics();
+          playerGraphics.fillStyle(0x00ff00);
+          playerGraphics.fillCircle(0, 0, this.gridSize / 3);
 
-      if (!this.players.has(userId)) {
-        // Create new player
-        const playerGraphics = this.add.graphics();
-        playerGraphics.fillStyle(0x00ff00);
-        playerGraphics.fillCircle(0, 0, this.gridSize / 3);
+          const container = this.add.container(position.x, position.y, [
+            playerGraphics,
+          ]);
+          const playerText = this.add.text(0, 0, "👤", {
+            fontSize: "24px",
+            color: "#FFFFFF",
+          });
+          playerText.setOrigin(0.5, 0.5);
+          container.add(playerText);
 
-        const container = this.add.container(position.x, position.y, [
-          playerGraphics,
-        ]);
-        const playerText = this.add.text(0, 0, "👤", {
-          fontSize: "24px",
-          color: "#FFFFFF",
-        });
-        playerText.setOrigin(0.5, 0.5);
-        container.add(playerText);
+          this.players.set(userId, container);
+        } else {
+          // Update existing player position
+          const player = this.players.get(userId);
+          player.setPosition(position.x, position.y);
 
-        this.players.set(userId, container);
-      } else {
-        // Update existing player position
-        const player = this.players.get(userId);
-        player.setPosition(position.x, position.y);
-
-        // Update chat indicator position if it exists
-        if (this.chatIndicators.has(userId)) {
-          const indicator = this.chatIndicators.get(userId);
-          indicator.setPosition(position.x, position.y - 40);
+          // Update chat indicator position if it exists
+          if (this.chatIndicators.has(userId)) {
+            const indicator = this.chatIndicators.get(userId);
+            indicator.setPosition(position.x, position.y - 40);
+          }
         }
-
-        this.checkProximity(userId, position);
-      }}
+      }
     });
-  }
-
-  checkProximity(userId, position) {
-    const dist = Phaser.Math.Distance.Between(
-      this.playerContainer.x,
-      this.playerContainer.y,
-      position.x,
-      position.y
-    );
-
-    if (dist < this.gridSize * 2 && !this.chatIndicators.has(userId)) {
-      this.socket.emit("request-chat", userId);
-    }
   }
 
   update() {
@@ -374,108 +288,8 @@ class WorkspaceScene extends Phaser.Scene {
   }
 }
 
-const ChatModal = ({ chatSessionId, onClose, socket }) => {
-  const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([]);
-
-  useEffect(() => {
-    socket.on("receive-message", (message) => {
-      setMessages((prev) => [...prev, message]);
-    });
-
-    socket.on("error", (error) => {
-      console.error("Chat error:", error);
-      // Add error handling, e.g. display error message to user
-    });
-
-    return () => {
-      socket.off("receive-message");
-      socket.off("error");
-    };
-  }, [socket]);
-
-  const sendMessage = () => {
-    if (!message.trim() || !socket || !chatSessionId) return;
-
-    socket.emit("send-message", { chatSessionId, message });
-    setMessages((prev) => [
-      ...prev,
-      {
-        senderId: socket.id,
-        message,
-        timestamp: new Date(),
-      },
-    ]);
-    setMessage("");
-  };
-
-  return (
-    <div className="fixed bottom-4 right-4 w-80 bg-white rounded-lg shadow-xl border border-gray-200">
-      <div className="p-4 border-b flex justify-between items-center bg-primary text-white rounded-t-lg">
-        <h3 className="font-semibold">Chat</h3>
-        <button
-          onClick={onClose}
-          className="hover:bg-primary-dark rounded-full w-6 h-6 flex items-center justify-center"
-        >
-          ×
-        </button>
-      </div>
-      <div className="h-96 overflow-y-auto p-4 space-y-2">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${
-              msg.senderId === socket?.id ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[80%] px-4 py-2 rounded-lg ${
-                msg.senderId === socket?.id
-                  ? "bg-primary text-white rounded-tr-none"
-                  : "bg-gray-100 rounded-tl-none"
-              }`}
-            >
-              {msg.message}
-              <div
-                className={`text-xs mt-1 ${
-                  msg.senderId === socket?.id
-                    ? "text-primary-100"
-                    : "text-gray-500"
-                }`}
-              >
-                {new Date(msg.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="p-4 border-t">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
-            className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-          <button
-            onClick={sendMessage}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark transition-colors"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function PhaserWorkspace({ workspaceData }) {
   const [isClient, setIsClient] = useState(false);
-  const [showChat, setShowChat] = useState(false);
-  const [chatSocket, setChatSocket] = useState(null);
-  const [currentChatSession, setCurrentChatSession] = useState(null);
   const [gameInstance, setGameInstance] = useState(null);
 
   useEffect(() => {
@@ -537,28 +351,6 @@ export default function PhaserWorkspace({ workspaceData }) {
     const game = new Phaser.Game(config);
     setGameInstance(game);
 
-    game.events.on("startChat", (userId, chatSessionId) => {
-      if (currentChatSession === chatSessionId) {
-        // Chat session already open, ignore the request
-        return;
-      }
-      console.log("Starting chat with user:", userId);
-      setCurrentChatSession(chatSessionId);
-      setShowChat(true);
-      const chatSocket = io("http://localhost:4000", {
-        transports: ["websocket"],
-      });
-
-      chatSocket.on("connect", () => {
-        console.log("Connected to chat server");
-      });
-
-      chatSocket.on("disconnect", (reason) => {
-        console.log("Disconnected from chat server:", reason);
-      });
-
-      setChatSocket(chatSocket);
-    });
     // Handle resize after a short delay to ensure proper initialization
     setTimeout(() => {
       const container = document.getElementById("phaser-container");
@@ -578,11 +370,8 @@ export default function PhaserWorkspace({ workspaceData }) {
     return () => {
       console.log("Cleaning up Phaser game");
       game.destroy(true);
-      if (chatSocket) {
-        chatSocket.disconnect();
-      }
     };
-  }, [isClient, workspaceData, chatSocket]);
+  }, [isClient, workspaceData]);
 
   if (!isClient) return null;
 
@@ -592,16 +381,6 @@ export default function PhaserWorkspace({ workspaceData }) {
         id="phaser-container"
         className="aspect-square w-full max-w-[800px] bg-white rounded-lg shadow-lg"
       />
-      {showChat && (
-        <ChatModal
-          chatSessionId={currentChatSession}
-          onClose={() => {
-            setShowChat(false);
-            setCurrentChatSession(null);
-          }}
-          socket={chatSocket}
-        />
-      )}
     </div>
   );
 }

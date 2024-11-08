@@ -106,78 +106,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle chat requests with validation
-    socket.on('request-chat', (targetUserId) => {
-      try {
-        if (!targetUserId || !users.has(targetUserId) || targetUserId === socket.id) {
-          throw new Error('Invalid target user');
-        }
-  
-        const existingSession = users.get(socket.id).chatSessions.find(
-          (session) => session.participants.includes(targetUserId)
-        );
-  
-        if (existingSession) {
-          // Session already exists
-          socket.emit('chat-already-exists', existingSession.id);
-          return;
-        }
-  
-        // Create a new chat session
-        const newChatSession = {
-          id: `chat-${socket.id}-${targetUserId}`,
-          participants: [socket.id, targetUserId],
-          messages: [],
-        };
-  
-        // Register session for both users
-        users.get(socket.id).chatSessions.push(newChatSession);
-        users.get(targetUserId).chatSessions.push(newChatSession);
-  
-        // Notify both users of the chat request
-        [socket.id, targetUserId].forEach((userId) =>
-          io.to(userId).emit('chat-request', {
-            senderId: socket.id,
-            chatSessionId: newChatSession.id,
-            timestamp: Date.now(),
-          })
-        );
-      } catch (error) {
-        console.error('Error in chat request:', error);
-        socket.emit('error', 'Invalid chat request');
-      }
-    });
-
-    // Handle messages with size limit
-    socket.on('send-message', ({ chatSessionId, message }) => {
-      try {
-        if (!chatSessionId || !message || message.length > 1000) {
-          throw new Error('Invalid message data');
-        }
-  
-        const senderData = users.get(socket.id);
-        const chatSession = senderData.chatSessions.find(
-          (session) => session.id === chatSessionId
-        );
-  
-        if (chatSession) {
-          const newMessage = {
-            senderId: socket.id,
-            message,
-            timestamp: Date.now(),
-          };
-          chatSession.messages.push(newMessage);
-  
-          chatSession.participants.forEach((participantId) =>
-            io.to(participantId).emit('receive-message', newMessage)
-          );
-        } else {
-          socket.emit('error', 'Chat session not found');
-        }
-      } catch (error) {
-        console.error('Error in message handling:', error);
-        socket.emit('error', 'Invalid message data');
-      }
-    });
+   
 
     // Handle disconnection with cleanup
     socket.on('disconnect', (reason) => {
