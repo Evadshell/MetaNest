@@ -1,9 +1,6 @@
-
-//TODO: creaqte a section of youtr workspace and team 
+//TODO: creaqte a section of youtr workspace and team
 "use client";
-import { linkAccount } from "../lib/authHelpers"; // Adjust path if needed
 import { useEffect, useState } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -12,59 +9,13 @@ import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, Settings, User } from "lucide-react";
+import { Github, PlusCircle, Settings, User } from "lucide-react";
 import { ClientDashboard } from "@/components/ClientDashboard";
-import { AccountLinkButton } from "@/components/AccountLinkButton";
 export default function Dashboard({ user }) {
   const particlesInit = useCallback(async (engine) => {
     await loadSlim(engine);
   }, []);
   const [workspaces, setWorkspaces] = useState([]);
-  const { isAuthenticated, loginWithPopup, getAccessTokenSilently } =
-    useAuth0();
-  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
-  const [isGitHubLinked, setIsGitHubLinked] = useState(false);
-  console.log(process.env.NEXT_PUBLIC_AUTH0_DOMAIN);
-  useEffect(() => {
-    const fetchWorkspaces = async () => {
-      const res = await fetch("/api/workspace");
-      const data = await res.json();
-      if (res.ok) setWorkspaces(data.workspaces);
-    };
-
-    const checkLinkedAccounts = async () => {
-      const token = await getAccessTokenSilently();
-      const res = await fetch(
-        `https://${process.env.NEXT_PUBLIC_AUTH0_DOMAIN}/api/v2/users/${user.sub}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      const userProfile = await res.json();
-
-      setIsGoogleLinked(
-        userProfile.identities.some((id) => id.provider === "google-oauth2")
-      );
-      setIsGitHubLinked(
-        userProfile.identities.some((id) => id.provider === "github")
-      );
-    };
-
-    fetchWorkspaces();
-    if (isAuthenticated) checkLinkedAccounts();
-  }, [isAuthenticated, getAccessTokenSilently, user.sub]);
-  const handleLinkAccount = async (provider) => {
-    try {
-      await linkAccount(provider);
-      // Refresh the page to update the UI
-      window.location.reload();
-    } catch (error) {
-      console.error("Link account error:", error);
-      alert(error.message || "Failed to link account");
-    }
-  };
   useEffect(() => {
     const fetchWorkspaces = async () => {
       const res = await fetch("/api/workspace");
@@ -170,17 +121,6 @@ export default function Dashboard({ user }) {
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </Button>
-            <AccountLinkButton
-              provider="google-oauth2"
-              isLinked={isGoogleLinked}
-              onLink={() => setIsGoogleLinked(true)}
-            />
-
-            <AccountLinkButton
-              provider="github"
-              isLinked={isGitHubLinked}
-              onLink={() => setIsGitHubLinked(true)}
-            />
           </nav>
         </div>
         <div>
