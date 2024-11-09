@@ -1,14 +1,18 @@
-import React from 'react'
-import { useUser } from '@auth0/nextjs-auth0/client';
-import Dashboard from '@/components/Dashboard'
-export default  function DashboardPage() {
-  const { user, error, isLoading } = useUser();
-  if (isLoading) return <div>Loading...</div>;
+import React from "react";
+// import { useUser } from '@auth0/nextjs-auth0/client';
+import Dashboard from "@/components/Dashboard";
+// import { useSession } from 'next-auth/react';
+import { withPageAuthRequired, getSession } from "@auth0/nextjs-auth0";
 
-  return (
-    <div>
-       <Dashboard user={user} />
-    </div>
-  )
-}
-
+export default withPageAuthRequired(
+  async function DashboardPage() {
+    const session = await getSession();
+    // console.log(session);
+    return (
+      <div>
+        <Dashboard user={session?.user} />
+      </div>
+    );
+  },
+  { returnTo: "/" }
+);
