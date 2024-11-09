@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { CalendarDays, CheckCircle2, Clock, Award } from 'lucide-react';
 
@@ -34,47 +33,27 @@ export function TaskList({ tasks, isLeader, onStatusChange, onVerify }) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-2 pb-4">
-        <Button
-          variant={filter === 'all' ? 'default' : 'outline'}
-          onClick={() => setFilter('all')}
-        >
-          All
-        </Button>
-        <Button
-          variant={filter === 'pending' ? 'default' : 'outline'}
-          onClick={() => setFilter('pending')}
-        >
-          Pending
-        </Button>
-        <Button
-          variant={filter === 'in-progress' ? 'default' : 'outline'}
-          onClick={() => setFilter('in-progress')}
-        >
-          In Progress
-        </Button>
-        <Button
-          variant={filter === 'completed' ? 'default' : 'outline'}
-          onClick={() => setFilter('completed')}
-        >
-          Completed
-        </Button>
-        <Button
-          variant={filter === 'verified' ? 'default' : 'outline'}
-          onClick={() => setFilter('verified')}
-        >
-          Verified
-        </Button>
+    <div className="space-y-4">
+      <div className="flex gap-2 pb-4 overflow-x-auto">
+        {['all', 'pending', 'in-progress', 'completed', 'verified'].map((status) => (
+          <Button
+            key={status}
+            variant={filter === status ? 'default' : 'outline'}
+            onClick={() => setFilter(status)}
+            className="whitespace-nowrap"
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </Button>
+        ))}
       </div>
 
-      <div className="grid gap-4">
+      <div className="space-y-4">
         {filteredTasks.map(task => {
           const dueStatus = getDueStatus(task.deadline);
           
           return (
             <Card key={task._id} className="overflow-hidden">
-              <CardHeader className="bg-gray-50">
+              <CardHeader className="bg-gray-50 p-4">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-lg font-semibold">{task.title}</h3>
@@ -91,11 +70,11 @@ export function TaskList({ tasks, isLeader, onStatusChange, onVerify }) {
                 </div>
               </CardHeader>
               
-              <CardContent className="pt-4">
-                <p className="text-gray-600 mb-4">{task.description}</p>
+              <CardContent className="p-4">
+                <p className="text-gray-600 mb-4 text-sm">{task.description}</p>
                 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                     <div className="flex items-center gap-1">
                       <CalendarDays className="h-4 w-4" />
                       <span className={`text-sm ${dueStatus.color}`}>
@@ -114,6 +93,7 @@ export function TaskList({ tasks, isLeader, onStatusChange, onVerify }) {
                     {!isLeader && task.status === 'pending' && (
                       <Button 
                         variant="outline"
+                        size="sm"
                         onClick={() => onStatusChange(task._id, 'completed')}
                       >
                         Mark Complete
@@ -122,6 +102,7 @@ export function TaskList({ tasks, isLeader, onStatusChange, onVerify }) {
                     {isLeader && task.status === 'completed' && (
                       <Button
                         variant="default"
+                        size="sm"
                         onClick={() => onVerify(task._id)}
                       >
                         Verify Task

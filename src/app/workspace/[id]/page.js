@@ -7,7 +7,6 @@ import { CreateTaskForm } from '@/components/CreateTaskForm';
 import { WorkspaceClient } from './WorkspaceClient';
 
 export default async function WorkspacePage({ params }) {
-  // Store params.id in a variable first
   const workspaceId = params?.id;
   
   if (!workspaceId) {
@@ -20,7 +19,6 @@ export default async function WorkspacePage({ params }) {
       return redirect('/api/auth/login');
     }
 
-    // Use lean() to get plain JavaScript objects instead of Mongoose documents
     const space = await Space.findOne({ id: workspaceId }).lean();
     
     if (!space) {
@@ -35,7 +33,6 @@ export default async function WorkspacePage({ params }) {
     const user = await User.findOne({ auth0Id: session.user.sid }).lean();
     const isLeader = space.author === session.user.sid;
 
-    // Use lean() here as well
     const tasks = await Task.find({
       spaceId: workspaceId,
       ...(isLeader ? {} : { assignedTo: session.user.sid })
@@ -43,14 +40,12 @@ export default async function WorkspacePage({ params }) {
     .sort({ createdAt: -1 })
     .lean();
 
-    // Create a safe version of the data for serialization
     const safeSpace = {
       ...space,
       members: space.members?.map(member => ({
         id: member.userId?.toString(),
         name: member.name,
         email: member.email,
-        // Add other necessary member fields, but keep them simple
       })) || [],
       _id: space._id?.toString()
     };
@@ -58,7 +53,6 @@ export default async function WorkspacePage({ params }) {
     const safeTasks = tasks.map(task => ({
       ...task,
       _id: task._id?.toString(),
-      // Convert any other ObjectIds to strings
       assignedTo: task.assignedTo?.toString(),
       createdBy: task.createdBy?.toString(),
       createdAt: task.createdAt?.toISOString(),
@@ -66,32 +60,35 @@ export default async function WorkspacePage({ params }) {
     }));
 
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">{safeSpace.name}</h1>
-            <p className="text-gray-500">ID: {safeSpace.id}</p>
-            <p className="text-gray-500">Access Code: {safeSpace.accessCode}</p>
+      <div className="flex h-screen bg-gray-100">
+        <div className="w-1/4 p-6 bg-white shadow-lg overflow-y-auto">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-800">{safeSpace.name}</h1>
+            <p className="text-sm text-gray-500">ID: {safeSpace.id}</p>
+            <p className="text-sm text-gray-500">Access Code: {safeSpace.accessCode}</p>
           </div>
+          
           {isLeader && (
-            <CreateTaskForm 
-              spaceId={workspaceId} 
-              members={safeSpace.members} 
-            />
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">Create New Task</h2>
+              <CreateTaskForm 
+                spaceId={workspaceId} 
+                members={safeSpace.members} 
+              />
+            </div>
           )}
-        </div>
 
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-3">
-            {/* Leaderboard component can be added here */}
-          </div>
-          <div className="col-span-9">
-            <WorkspaceClient
-              initialTasks={safeTasks}
-              isLeader={isLeader}
-              spaceId={workspaceId}
-              members={safeSpace.members}
-            />
+          <WorkspaceClient
+            initialTasks={safeTasks}
+            isLeader={isLeader}
+            spaceId={workspaceId}
+            members={safeSpace.members}
+          />
+        </div>
+        <div className="w-3/4 bg-gray-200 p-6">
+          {/* Placeholder for the 3/4 width rectangle */}
+          <div className="h-full bg-white rounded-lg shadow-lg flex items-center justify-center">
+            <p className="text-2xl text-gray-400">Additional content area (3/4 width)</p>
           </div>
         </div>
       </div>

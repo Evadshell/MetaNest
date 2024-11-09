@@ -9,17 +9,17 @@ import {
 
 export function TaskFilters({ onFilterChange, onSearch }) {
   return (
-    <div className="flex gap-4 mb-6">
+    <div className="flex flex-col sm:flex-row gap-4 mb-6">
       <Input
         placeholder="Search tasks..."
         onChange={(e) => onSearch(e.target.value)}
-        className="max-w-xs"
+        className="w-full sm:w-64"
       />
       <Select 
         onValueChange={onFilterChange}
         defaultValue="all"
       >
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-full sm:w-48">
           <SelectValue placeholder="Filter by status" />
         </SelectTrigger>
         <SelectContent>

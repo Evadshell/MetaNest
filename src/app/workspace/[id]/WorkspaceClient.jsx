@@ -30,7 +30,6 @@ export function WorkspaceClient({ initialTasks, isLeader, spaceId, members }) {
       }
 
       const updatedTask = await response.json();
-      // Update your local tasks state here
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task._id === taskId ? updatedTask : task
@@ -44,13 +43,13 @@ export function WorkspaceClient({ initialTasks, isLeader, spaceId, members }) {
   }, [spaceId]);
 
   return (
-    <Tabs defaultValue="tasks">
-      <TabsList>
-        <TabsTrigger value="tasks">Tasks</TabsTrigger>
-        {isLeader && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+    <Tabs defaultValue="tasks" className="w-full">
+      <TabsList className="w-full mb-4">
+        <TabsTrigger value="tasks" className="flex-1">Tasks</TabsTrigger>
+        {isLeader && <TabsTrigger value="analytics" className="flex-1">Analytics</TabsTrigger>}
       </TabsList>
 
-      <TabsContent value="tasks" className="mt-6">
+      <TabsContent value="tasks">
         <TaskFilters
           onFilterChange={setFilter}
           onSearch={setSearchQuery}
@@ -62,6 +61,15 @@ export function WorkspaceClient({ initialTasks, isLeader, spaceId, members }) {
           onVerify={(taskId) => handleStatusChange(taskId, 'verified')}
         />
       </TabsContent>
+
+      {isLeader && (
+        <TabsContent value="analytics">
+          <div className="p-4 bg-white rounded-lg shadow">
+            <h3 className="text-lg font-semibold mb-2">Analytics Content</h3>
+            <p>Add your analytics content here.</p>
+          </div>
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
