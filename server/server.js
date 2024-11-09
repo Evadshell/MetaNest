@@ -6,279 +6,231 @@ import { rateLimit } from 'express-rate-limit';
 const app = express();
 const server = createServer(app);
 
-// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100
 });
 
 app.use(limiter);
 
-// Improved error handling
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  // Implement error reporting service here if needed
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
 const io = new Server(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? ['https://yourdomain.com'] 
+      ? [process.env.CLIENT_URL] 
       : ['http://localhost:3000'],
     methods: ['GET', 'POST'],
     credentials: true
   },
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 5000,
 });
 
-// Enhanced user tracking
-class UserState {
-  constructor(socket) {
-    this.socket = socket;
-    this.position = null;
-    this.lastActive = Date.now();
-    this.connectionTime = Date.now();
-    this.currentZone = null;
-    this.chatSessions = new Set();
-    this.lastMove = Date.now();
+class GameWorld {
+  constructor() {
+    this.players = new Map();
+    this.collectibles = new Map();
+    this.leaderboard = [];
+    this.worldBounds = { width: 2000, height: 1500 };
+    this.spawnCollectibles();
   }
 
-  updatePosition(position) {
-    this.position = position;
-    this.lastActive = Date.now();
-    this.lastMove = Date.now();
+  spawnCollectibles() {
+    for (let i = 0; i < 20; i++) {
+      this.addCollectible();
+    }
   }
 
-  setZone(zone) {
-    this.currentZone = zone;
+  addCollectible() {
+    const id = Math.random().toString(36).substr(2, 9);
+    this.collectibles.set(id, {
+      id,
+      x: Math.random() * this.worldBounds.width,
+      y: Math.random() * this.worldBounds.height,
+      type: Math.random() > 0.8 ? 'power' : 'points',
+      value: Math.random() > 0.8 ? 10 : 1
+    });
   }
 
-  isInactive(timeout) {
-    return Date.now() - this.lastActive > timeout;
+  addPlayer(socketId, playerData) {
+    const spawnPoint = this.getRandomSpawnPoint();
+    this.players.set(socketId, {
+      id: socketId,
+      x: spawnPoint.x,
+      y: spawnPoint.y,
+      size: 20,
+      speed: 300,
+      color: playerData.color || this.getRandomColor(),
+      score: 0,
+      powerUps: [],
+      username: playerData.username || `Player${socketId.substr(0, 4)}`,
+      lastActive: Date.now(),
+      lastPosition: spawnPoint
+    });
+    this.updateLeaderboard();
+  }
+
+  getRandomSpawnPoint() {
+    return {
+      x: Math.random() * (this.worldBounds.width - 100) + 50,
+      y: Math.random() * (this.worldBounds.height - 100) + 50
+    };
+  }
+
+  getRandomColor() {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  updatePlayer(socketId, data) {
+    const player = this.players.get(socketId);
+    if (player) {
+      const newPos = this.validatePosition(data);
+      Object.assign(player, newPos, { lastActive: Date.now() });
+      this.checkCollectibleCollisions(socketId);
+    }
+  }
+
+  validatePosition(position) {
+    return {
+      x: Math.max(0, Math.min(position.x, this.worldBounds.width)),
+      y: Math.max(0, Math.min(position.y, this.worldBounds.height))
+    };
+  }
+
+  checkCollectibleCollisions(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    this.collectibles.forEach((collectible, collectibleId) => {
+      if (this.checkCollision(player, collectible)) {
+        this.handleCollection(playerId, collectibleId);
+      }
+    });
+  }
+
+  checkCollision(player, collectible) {
+    const distance = Math.sqrt(
+      Math.pow(player.x - collectible.x, 2) + 
+      Math.pow(player.y - collectible.y, 2)
+    );
+    return distance < player.size + 10;
+  }
+
+  handleCollection(playerId, collectibleId) {
+    const player = this.players.get(playerId);
+    const collectible = this.collectibles.get(collectibleId);
+    
+    if (player && collectible) {
+      if (collectible.type === 'power') {
+        player.powerUps.push({
+          type: 'speed',
+          duration: 5000,
+          startTime: Date.now()
+        });
+        player.speed = 450; // Temporary speed boost
+        setTimeout(() => {
+          player.speed = 300;
+          player.powerUps = player.powerUps.filter(p => p.startTime + p.duration > Date.now());
+        }, 5000);
+      } else {
+        player.score += collectible.value;
+      }
+      
+      this.collectibles.delete(collectibleId);
+      this.addCollectible(); // Spawn new collectible
+      this.updateLeaderboard();
+      
+      return {
+        playerId,
+        collectibleId,
+        playerState: player,
+        newCollectible: Array.from(this.collectibles.values()).pop()
+      };
+    }
+    return null;
+  }
+
+  updateLeaderboard() {
+    this.leaderboard = Array.from(this.players.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map(p => ({
+        username: p.username,
+        score: p.score,
+        id: p.id
+      }));
+  }
+
+  removePlayer(socketId) {
+    this.players.delete(socketId);
+    this.updateLeaderboard();
+  }
+
+  getState() {
+    return {
+      players: Object.fromEntries(this.players),
+      collectibles: Object.fromEntries(this.collectibles),
+      leaderboard: this.leaderboard
+    };
   }
 }
-const users = new Map();
-const MOVE_RATE_LIMIT = 50; // ms
-const INACTIVE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-const RECONNECT_WINDOW = 30000; // 30 seconds for reconnection attempts
-const connectionAttempts = new Map();
 
-// Middleware for authentication
-io.use((socket, next) => {
-  const clientId = socket.handshake.auth.clientId || socket.id;
-  
-  // Check for frequent reconnection attempts
-  const lastAttempt = connectionAttempts.get(clientId);
-  const now = Date.now();
-  
-  if (lastAttempt && (now - lastAttempt) < 1000) {
-    return next(new Error('Rate limit exceeded'));
-  }
-  
-  connectionAttempts.set(clientId, now);
-  
-  // Clean up old connection attempts
-  setTimeout(() => connectionAttempts.delete(clientId), 5000);
-  
-  next();
-});
+const gameWorld = new GameWorld();
+const MOVE_RATE_LIMIT = 16;
+const INACTIVE_TIMEOUT = 5 * 60 * 1000;
 
 io.on('connection', (socket) => {
-  try {
-    const existingUser = Array.from(users.values()).find(u => u.socket.handshake.auth.clientId === socket.handshake.auth.clientId);
-if (existingUser) {
-      console.log('User reconnected:', socket.id);
-      // Update socket reference
-      existingUser.socket = socket;
-      users.set(socket.id, existingUser);
-    }  else {
-      console.log('New user connected:', socket.id);
-      const user = new UserState(socket);
-      users.set(socket.id, user);
-      
-      // Notify others of new user
-      socket.broadcast.emit('user-joined', {
-        userId: socket.id,
-        totalUsers: users.size
-      });
+  console.log('Player connected:', socket.id);
+
+  socket.on('player-join', (playerData = {}) => {
+    try {
+      gameWorld.addPlayer(socket.id, playerData);
+      socket.emit('game-state', gameWorld.getState());
+      socket.broadcast.emit('player-joined', gameWorld.players.get(socket.id));
+    } catch (error) {
+      handleError(socket, 'player-join', error);
     }
+  });
 
-    // Handle initial position
-    socket.on('set-initial-position', (position) => {
-      try {
-        if (!isValidPosition(position)) {
-          throw new Error('Invalid position data');
-        }
+  socket.on('player-move', (movement) => {
+    try {
+      const player = gameWorld.players.get(socket.id);
+      if (!player || Date.now() - player.lastActive < MOVE_RATE_LIMIT) return;
 
-        const user = users.get(socket.id);
-        if (user) {
-          user.updatePosition(position);
-          broadcastPositions();
-        }
-      } catch (error) {
-        handleError(socket, 'set-initial-position', error);
+      const collectionUpdate = gameWorld.updatePlayer(socket.id, movement);
+      
+      socket.broadcast.emit('player-moved', {
+        id: socket.id,
+        ...gameWorld.players.get(socket.id)
+      });
+
+      if (collectionUpdate) {
+        io.emit('collectible-collected', collectionUpdate);
       }
-    });
+    } catch (error) {
+      handleError(socket, 'player-move', error);
+    }
+  });
 
-    // Handle movement with rate limiting
-    socket.on('move', (position) => {
-      try {
-        const user = users.get(socket.id);
-        if (!user) return;
-
-        if (Date.now() - user.lastMove < MOVE_RATE_LIMIT) {
-          return; // Rate limit exceeded
-        }
-
-        if (!isValidPosition(position)) {
-          throw new Error('Invalid movement data');
-        }
-
-        user.updatePosition(position);
-        broadcastPositions();
-      } catch (error) {
-        handleError(socket, 'move', error);
-      }
-    });
-
-    // Handle zone changes
-    socket.on('enter-zone', (zoneName) => {
-      try {
-        const user = users.get(socket.id);
-        if (user) {
-          user.setZone(zoneName);
-          socket.broadcast.emit('user-zone-change', {
-            userId: socket.id,
-            zone: zoneName
-          });
-        }
-      } catch (error) {
-        handleError(socket, 'enter-zone', error);
-      }
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', (reason) => {
-      try {
-        const user = users.get(socket.id);
-        if (!user) return;
-
-        // Give time for potential reconnection before full cleanup
-        setTimeout(() => {
-          const reconnected = Array.from(users.values()).some(u => 
-            u.socket.handshake.auth.clientId === socket.handshake.auth.clientId
-          );
-
-          if (!reconnected) {
-            handleDisconnect(socket.id, reason);
-          }
-        }, RECONNECT_WINDOW);
-
-      } catch (error) {
-        console.error('Error in disconnect handler:', error);
-      }
-    });
-
-  } catch (error) {
-    console.error('Error in connection handler:', error);
-    socket.disconnect(true);
-  }
+  socket.on('disconnect', () => {
+    gameWorld.removePlayer(socket.id);
+    io.emit('player-left', { id: socket.id, leaderboard: gameWorld.leaderboard });
+  });
 });
-
-// Helper functions
-function isValidPosition(position) {
-  return position && 
-         typeof position === 'object' &&
-         typeof position.x === 'number' &&
-         typeof position.y === 'number' &&
-         !isNaN(position.x) &&
-         !isNaN(position.y);
-}
 
 function handleError(socket, event, error) {
   console.error(`Error in ${event}:`, error);
-  socket.emit('error', {
-    event,
-    message: error.message
-  });
+  socket.emit('error', { event, message: error.message });
 }
 
-function handleDisconnect(userId, reason) {
-  users.delete(userId);
-  io.emit('user-left', {
-    userId,
-    totalUsers: users.size,
-    reason
-  });
-  broadcastPositions();
-}
-
-function broadcastPositions() {
-  try {
-    const positions = {};
-    for (const [id, user] of users.entries()) {
-      positions[id] = user.position;
-    }
-    io.emit('update-positions', positions);
-  } catch (error) {
-    console.error('Error broadcasting positions:', error);
-  }
-}
-
-// Cleanup inactive users
 setInterval(() => {
-  try {
-    for (const [socketId, user] of users.entries()) {
-      if (user.isInactive(INACTIVE_TIMEOUT)) {
-        handleDisconnect(socketId, 'inactivity');
-      }
+  for (const [socketId, player] of gameWorld.players.entries()) {
+    if (Date.now() - player.lastActive > INACTIVE_TIMEOUT) {
+      gameWorld.removePlayer(socketId);
+      io.emit('player-left', { id: socketId, leaderboard: gameWorld.leaderboard });
     }
-  } catch (error) {
-    console.error('Error in cleanup interval:', error);
   }
 }, 60000);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  try {
-    const metrics = {
-      status: 'healthy',
-      connections: users.size,
-      uptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      timestamp: new Date().toISOString()
-    };
-    res.status(200).json(metrics);
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
 const PORT = process.env.PORT || 4000;
-
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-
-  setTimeout(() => {
-    console.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 10000);
-});
+server.listen(PORT, () => console.log(`Game server running on port ${PORT}`));

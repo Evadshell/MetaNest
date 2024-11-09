@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Github, PlusCircle, Settings, User, Users } from "lucide-react";
 import { ClientDashboard } from "@/components/ClientDashboard";
+import { JoinWorkspaceModal } from "./JoinWorkSpaceModal";
+import { JoinWorkspaceButton } from "./JoinWorkSpaceButton";
 
 export default function Dashboard({ user }) {
   const particlesInit = useCallback(async (engine) => {
@@ -72,7 +74,7 @@ export default function Dashboard({ user }) {
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </Button>
-            <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
+            {/* <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start">
                   <Users className="mr-2 h-4 w-4" /> Join Workspace
@@ -89,7 +91,8 @@ export default function Dashboard({ user }) {
                 />
                 <Button onClick={handleJoinWorkspace}>Join</Button>
               </DialogContent>
-            </Dialog>
+            </Dialog> */}
+            <JoinWorkspaceButton />
           </nav>
         </div>
         <div>

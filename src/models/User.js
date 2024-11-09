@@ -8,6 +8,11 @@ const UserSchema = new mongoose.Schema({
   nickname : {type:String},
   picture:{type:String},
   avartarId:{type:String},
+  spaces: [{
+    spaceId: String,
+    role: { type: String, enum: ['leader', 'member'] },
+    points: { type: Number, default: 0 }
+  }],
   createdAt: { type: Date, default: Date.now },
 });
 

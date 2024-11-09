@@ -1,4 +1,4 @@
-// src/lib/User.js
+// models/Space.js
 import mongoose from "mongoose";
 
 const SpaceSchema = new mongoose.Schema({
@@ -7,12 +7,25 @@ const SpaceSchema = new mongoose.Schema({
     width: { type: Number },
     height: { type: Number },
     thumbnail: { type: String },
-
-    author: {  // fixed spelling of "author"
+    author: { 
         type: String,
         required: true
-    },    createdAt: { type: Date, default: Date.now },
+    },
+    // New fields
+    accessCode: { 
+        type: String, 
+        required: true,
+        unique: true 
+    },
+    members: [{
+        userId: String,
+        email: String,
+        name: String,
+        picture: String,
+        points: { type: Number, default: 0 },
+        joinedAt: { type: Date, default: Date.now }
+    }],
+    createdAt: { type: Date, default: Date.now },
 });
 
 export default mongoose.models?.Space || mongoose.model("Space", SpaceSchema);
-//TODO: add that team members list and last active currently active and all features

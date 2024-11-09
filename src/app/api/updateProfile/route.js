@@ -13,12 +13,12 @@ export async function GET(req) {
     }
 
     await connectToDatabase();
-    let user = await User.findOne({ auth0Id: session.user.sub });
+    let user = await User.findOne({ auth0Id: session.user.sid });
 
     if (!user) {
       // Create new user if doesn't exist
       user = await User.create({
-        auth0Id: session.user.sub,
+        auth0Id: session.user.sid,
         email: session.user.email,
         name: session.user.name,
         picture: session.user.picture,
@@ -48,7 +48,7 @@ export async function PUT(req) {
     await connectToDatabase();
 
     const updatedUser = await User.findOneAndUpdate(
-      { auth0Id: session.user.sub },
+      { auth0Id: session.user.sid },
       {
         $set: {
           nickname,
