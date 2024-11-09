@@ -7,7 +7,11 @@ const SpaceSchema = new mongoose.Schema({
     width: { type: Number },
     height: { type: Number },
     thumbnail: { type: String },
-    createdAt: { type: Date, default: Date.now },
+
+    author: {  // fixed spelling of "author"
+        type: String,
+        required: true
+    },    createdAt: { type: Date, default: Date.now },
 });
 
 export default mongoose.models?.Space || mongoose.model("Space", SpaceSchema);

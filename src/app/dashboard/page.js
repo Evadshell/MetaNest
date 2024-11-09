@@ -1,13 +1,12 @@
 import React from 'react'
 import { useUser } from '@auth0/nextjs-auth0/client';
 import Dashboard from '@/components/Dashboard'
-export default  function DashboardPage() {
-  const { user, error, isLoading } = useUser();
-  if (isLoading) return <div>Loading...</div>;
-
+import { getSession } from '@auth0/nextjs-auth0'
+export default async function DashboardPage() {
+  const session = await getSession();
   return (
     <div>
-       <Dashboard user={user} />
+       <Dashboard user={session?.user} />
     </div>
   )
 }

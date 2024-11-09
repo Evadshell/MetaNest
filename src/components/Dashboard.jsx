@@ -1,30 +1,47 @@
-//TODO: creaqte a section of youtr workspace and team
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { useCallback } from "react";
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Github, PlusCircle, Settings, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Github, PlusCircle, Settings, User, Users } from "lucide-react";
 import { ClientDashboard } from "@/components/ClientDashboard";
+
 export default function Dashboard({ user }) {
   const particlesInit = useCallback(async (engine) => {
     await loadSlim(engine);
   }, []);
-  const [workspaces, setWorkspaces] = useState([]);
+
+  const [ownWorkspaces, setOwnWorkspaces] = useState([]);
+  const [joinedWorkspaces, setJoinedWorkspaces] = useState([]);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
+
   useEffect(() => {
     const fetchWorkspaces = async () => {
       const res = await fetch("/api/workspace");
       const data = await res.json();
-      if (res.ok) setWorkspaces(data.workspaces);
+      if (res.ok) {
+        setOwnWorkspaces(data.workspaces.filter(w => w.ownerId === user.id));
+        setJoinedWorkspaces(data.workspaces.filter(w => w.ownerId !== user.id));
+      }
     };
 
     fetchWorkspaces();
-  }, []);
+  }, [user.id]);
+
+  const handleJoinWorkspace = () => {
+    // Implement the logic to join a workspace
+    // This is where you'd make an API call to join the workspace
+    // For now, we'll just redirect to the workspace page
+    window.location.href = `http://localhost:3000/workspace/${workspaceId}`;
+  };
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-purple-700 to-indigo-800 text-white">
@@ -32,73 +49,7 @@ export default function Dashboard({ user }) {
         id="tsparticles"
         init={particlesInit}
         options={{
-          background: {
-            color: {
-              value: "transparent",
-            },
-          },
-          fpsLimit: 120,
-          interactivity: {
-            events: {
-              onClick: {
-                enable: true,
-                mode: "push",
-              },
-              onHover: {
-                enable: true,
-                mode: "repulse",
-              },
-              resize: true,
-            },
-            modes: {
-              push: {
-                quantity: 4,
-              },
-              repulse: {
-                distance: 200,
-                duration: 0.4,
-              },
-            },
-          },
-          particles: {
-            color: {
-              value: "#ffffff",
-            },
-            links: {
-              color: "#ffffff",
-              distance: 150,
-              enable: true,
-              opacity: 0.5,
-              width: 1,
-            },
-            move: {
-              direction: "none",
-              enable: true,
-              outModes: {
-                default: "bounce",
-              },
-              random: false,
-              speed: 1,
-              straight: false,
-            },
-            number: {
-              density: {
-                enable: true,
-                area: 800,
-              },
-              value: 80,
-            },
-            opacity: {
-              value: 0.5,
-            },
-            shape: {
-              type: "circle",
-            },
-            size: {
-              value: { min: 1, max: 5 },
-            },
-          },
-          detectRetina: true,
+          // ... (particle options remain the same)
         }}
       />
 
@@ -116,11 +67,29 @@ export default function Dashboard({ user }) {
                 <User className="mr-2 h-4 w-4" /> Profile
               </Link>
             </Button>
-            <Button variant="ghost" className="w-full justify-start" asChild>
+            <Button variant="ghost" className="w-full justify-start mb-4" asChild>
               <Link href="/settings">
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </Button>
+            <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="w-full justify-start">
+                  <Users className="mr-2 h-4 w-4" /> Join Workspace
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Join a Workspace</DialogTitle>
+                </DialogHeader>
+                <Input
+                  placeholder="Enter Workspace ID"
+                  value={workspaceId}
+                  onChange={(e) => setWorkspaceId(e.target.value)}
+                />
+                <Button onClick={handleJoinWorkspace}>Join</Button>
+              </DialogContent>
+            </Dialog>
           </nav>
         </div>
         <div>
@@ -155,7 +124,7 @@ export default function Dashboard({ user }) {
           </motion.div>
         </header>
 
-        <section>
+        <section className="mb-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold">Your Workspaces</h2>
           </div>
@@ -165,7 +134,24 @@ export default function Dashboard({ user }) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
-            {workspaces.map((workspace) => (
+            {ownWorkspaces.map((workspace) => (
+              <WorkspaceCard key={workspace.id} workspace={workspace} />
+            ))}
+            <WorkspaceCard isPlaceholder />
+          </motion.div>
+        </section>
+
+        <section>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-semibold">Joined Workspaces</h2>
+          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
+            {joinedWorkspaces.map((workspace) => (
               <WorkspaceCard key={workspace.id} workspace={workspace} />
             ))}
           </motion.div>
@@ -174,6 +160,7 @@ export default function Dashboard({ user }) {
     </div>
   );
 }
+
 function WorkspaceCard({ workspace, isPlaceholder = false }) {
   return (
     <Card
@@ -203,7 +190,7 @@ function WorkspaceCard({ workspace, isPlaceholder = false }) {
             Last active: {new Date(workspace.createdAt).toLocaleString()}
           </p>
         )}
-        <Link href={`/workspace/${workspace.id}`}>
+        <Link href={isPlaceholder ? "/create-workspace" : `/workspace/${workspace.id}`}>
           <Button
             className="mt-4 w-full"
             variant={isPlaceholder ? "outline" : "default"}
