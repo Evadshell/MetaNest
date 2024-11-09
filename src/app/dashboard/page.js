@@ -1,8 +1,7 @@
-import React from "react";
-// import { useUser } from '@auth0/nextjs-auth0/client';
-import Dashboard from "@/components/Dashboard";
-// import { useSession } from 'next-auth/react';
-import { withPageAuthRequired, getSession } from "@auth0/nextjs-auth0";
+import React from 'react'
+import { useUser } from '@auth0/nextjs-auth0/client';
+import Dashboard from '@/components/Dashboard'
+import { getSession } from '@auth0/nextjs-auth0'
 
 export default withPageAuthRequired(
   async function DashboardPage() {
