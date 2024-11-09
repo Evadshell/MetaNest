@@ -5,7 +5,7 @@ import Task from '@/models/Task';
 import User from '@/models/User';
 import { CreateTaskForm } from '@/components/CreateTaskForm';
 import { WorkspaceClient } from './WorkspaceClient';
-
+import OfficeGame from '@/components/MultiPlayer';
 export default async function WorkspacePage({ params }) {
   const workspaceId = params?.id;
   
@@ -86,9 +86,8 @@ export default async function WorkspacePage({ params }) {
           />
         </div>
         <div className="w-3/4 bg-gray-200 p-6">
-          {/* Placeholder for the 3/4 width rectangle */}
           <div className="h-full bg-white rounded-lg shadow-lg flex items-center justify-center">
-            <p className="text-2xl text-gray-400">Additional content area (3/4 width)</p>
+          <OfficeGame />
           </div>
         </div>
       </div>
