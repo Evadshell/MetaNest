@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import Phaser from 'phaser'
 import io from 'socket.io-client'
 import { Toaster } from '@/components/ui/toaster'
@@ -20,7 +20,8 @@ import {
   Users, 
   MessageSquare, 
   Settings,
-  User
+  User,
+  X
 } from 'lucide-react'
 
 const ICE_SERVERS = {
@@ -86,28 +87,21 @@ export default function OfficeGame() {
       this.load.image('avatar', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAGMSURBVHgB7VZBUsJAEOzZzfIGfoF+QX1B8oQUj+YH+gMO3tQf4A/kBxBP6g8SfyBvUCucZHfHZA0JkAQSU8WjXbU1yc7OTk9PT4BFixYtEth7f+9rMtIU6HoAOAHAGQHtAWCKgMdENA6ePj/Yc0IA9JzWZwBHhQMRjYg4CJ4/RvnxXIDu9XXHWDsgAHfZBwGGxtBdNBpNl2OLALre9xkCXhZmTxiFYXgRj+cCdK9uDo2lFyK4zOYJ4p9REIycAMoQwNBbMq+wl8LO0PNOiWjgbKGloeA4m0yw7wTo9TzX0NuKcLgYTwXoXfk9g/SaEiDgcxAEfbVfCdDtet+I9JISoO1wODxTe1a8RNrQVqmjHYt3YbkeEjmXzNtKAGV/BdB2vV7/Ru1rAZQlwM3GBMgWYGMC/P0lsEg3xthTpY8iaLtMgFUOLBNAWQLYTQmgTAHsRgRQtgDKFkDZAihbAGULoGwBlC2AsgVQtgDKFkDZAihbAGULoGwBlC2AsgVQtgDKFkDZAihbgBYtWvwv/ACePbx0qBd0YAAAAABJRU5ErkJggg==')
     }
 
+   
     function createFurniture(scene, x, y, width, height, color, type) {
-      const item = scene.add.rectangle(x, y, width, height, color)
-      item.setStrokeStyle(2, 0x000000)
-      furniture.push(item)
-      
-      scene.add.text(x - width/2 + 5, y - height/2 + 5, type, { 
-        fontSize: '12px',
-        color: '#000000',
-        backgroundColor: '#FFFFFF',
-        padding: { x: 2, y: 1 }
-      })
-      
-      return item
-    }
-
+        const item = scene.add.rectangle(x, y, width, height, color)
+        item.setStrokeStyle(2, 0x000000)
+        furniture.push(item)
+        return item
+      }
     function create() {
-      this.add.rectangle(400, 300, 780, 580, 0xFFFFFF).setStrokeStyle(4, 0x333333)
+        this.add.rectangle(400, 300, 780, 580, 0xE0E0E0).setStrokeStyle(4, 0x333333)      
       
-      const zoneData = [
+    const zoneData = [
         { 
           x: 50, y: 50, width: 200, height: 150, 
           name: 'Meeting Room',
+          color: 0xAED6F1,
           furniture: [
             { x: 125, y: 100, width: 120, height: 60, color: 0x8B4513, type: 'Table' },
             { x: 85, y: 80, width: 30, height: 30, color: 0x4A4A4A, type: 'Chair' },
@@ -120,6 +114,7 @@ export default function OfficeGame() {
         { 
           x: 300, y: 50, width: 200, height: 150, 
           name: 'Focus Zone',
+          color: 0xD5F5E3,
           furniture: [
             { x: 350, y: 100, width: 40, height: 60, color: 0x8B4513, type: 'Desk' },
             { x: 350, y: 80, width: 30, height: 30, color: 0x4A4A4A, type: 'Chair' },
@@ -130,6 +125,7 @@ export default function OfficeGame() {
         { 
           x: 550, y: 50, width: 200, height: 150, 
           name: 'Break Room',
+          color: 0xFADBD8,
           furniture: [
             { x: 600, y: 100, width: 80, height: 80, color: 0x8B4513, type: 'Sofa' },
             { x: 700, y: 100, width: 40, height: 40, color: 0x4A4A4A, type: 'Table' }
@@ -138,6 +134,7 @@ export default function OfficeGame() {
         { 
           x: 50, y: 250, width: 700, height: 300, 
           name: 'Open Office',
+          color: 0xF9E79F,
           furniture: [
             { x: 150, y: 300, width: 120, height: 60, color: 0x8B4513, type: 'Desk Pod' },
             { x: 150, y: 280, width: 30, height: 30, color: 0x4A4A4A, type: 'Chair' },
@@ -154,30 +151,44 @@ export default function OfficeGame() {
           ]
         }
       ]
-
-      zoneData.forEach(({ x, y, width, height, name, furniture: furnitureItems }) => {
+  
+      zoneData.forEach(({ x, y, width, height, name, color, furniture: furnitureItems }) => {
         const rectangle = new Phaser.Geom.Rectangle(x, y, width, height)
         zones.push({ zone: rectangle, name })
         
-        this.add.rectangle(x + width/2, y + height/2, width, height)
+        this.add.rectangle(x + width/2, y + height/2, width, height, color)
           .setStrokeStyle(2, 0x000000)
-          .setFillStyle(0xFFFFFF, 0.2)
-        
-        this.add.text(x + 10, y + 10, name, { 
-          fontSize: '16px',
-          color: '#000000',
-          backgroundColor: '#FFFFFF',
-          padding: { x: 5, y: 2 }
-        })
-
+  
         furnitureItems.forEach(item => {
           createFurniture(this, item.x, item.y, item.width, item.height, item.color, item.type)
         })
       })
-
+  
+      const plants = [
+        { x: 780, y: 30, radius: 20 },
+        { x: 780, y: 570, radius: 20 },
+        { x: 20, y: 30, radius: 20 },
+        { x: 20, y: 570, radius: 20 }
+      ]
+  
+      plants.forEach(plant => {
+        this.add.circle(plant.x, plant.y, plant.radius, 0x2ECC71)
+      })
+  
+    //   player = this.add.circle(400, 300, 16, 0xFF0000)
+    //   this.physics.add.existing(player)
+    //   player.body.setCollideWorldBounds(true)
+      
+      cursors = this.input.keyboard.createCursorKeys()
+  
+      
       player = this.physics.add.sprite(400, 300, 'avatar')
       player.setDisplaySize(32, 32)
       player.setCollideWorldBounds(true)
+      furniture.forEach(item => {
+        this.physics.add.existing(item, true)
+        this.physics.add.collider(player, item)
+    })
       
       const nameLabel = this.add.text(400, 320, userName, {
         fontSize: '14px',
@@ -315,6 +326,71 @@ export default function OfficeGame() {
     }
   }, [userName, toast])
 
+  const FurnitureIcon = ({ type }) => {
+    switch (type) {
+      case 'Chair':
+        return <FaChair />
+      case 'Table':
+      case 'Desk':
+        return <FaTable />
+      case 'Sofa':
+        return <FaCouch />
+      case 'Coffee Table':
+        return <FaCoffee />
+      case 'Desk Pod':
+        return <FaDesktop />
+      case 'Whiteboard':
+        return <FaChalkboard />
+      default:
+        return null
+    }
+  }
+  
+  const FurnitureOverlay = () => {
+    const furnitureData = [
+      { x: 125, y: 100, type: 'Table' },
+      { x: 85, y: 80, type: 'Chair' },
+      { x: 165, y: 80, type: 'Chair' },
+      { x: 85, y: 120, type: 'Chair' },
+      { x: 165, y: 120, type: 'Chair' },
+      { x: 230, y: 75, type: 'Whiteboard' },
+      { x: 350, y: 100, type: 'Desk' },
+      { x: 350, y: 80, type: 'Chair' },
+      { x: 450, y: 100, type: 'Desk' },
+      { x: 450, y: 80, type: 'Chair' },
+      { x: 600, y: 100, type: 'Sofa' },
+      { x: 700, y: 100, type: 'Coffee Table' },
+      { x: 150, y: 300, type: 'Desk Pod' },
+      { x: 150, y: 280, type: 'Chair' },
+      { x: 350, y: 300, type: 'Desk Pod' },
+      { x: 350, y: 280, type: 'Chair' },
+      { x: 550, y: 300, type: 'Desk Pod' },
+      { x: 550, y: 280, type: 'Chair' },
+      { x: 150, y: 450, type: 'Desk Pod' },
+      { x: 150, y: 430, type: 'Chair' },
+      { x: 350, y: 450, type: 'Desk Pod' },
+      { x: 350, y: 430, type: 'Chair' },
+      { x: 550, y: 450, type: 'Desk Pod' },
+      { x: 550, y: 430, type: 'Chair' }
+    ]
+    return (
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          {furnitureData.map((item, index) => (
+            <motion.div
+              key={index}
+              className="absolute text-gray-700"
+              style={{ left: item.x, top: item.y }}
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <FurnitureIcon type={item.type} />
+            </motion.div>
+          ))}
+        </div>
+      )
+    }
+  
   const startVideoChat = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
