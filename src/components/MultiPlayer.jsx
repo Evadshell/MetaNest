@@ -49,12 +49,14 @@ export default function OfficeGame() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true)
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState(new Set())
+  const [nearbyUsers, setNearbyUsers] = useState([])
   const [userName, setUserName] = useState(`User-${Math.floor(Math.random() * 1000)}`)
   const gameRef = useRef(null)
   const socketRef = useRef(null)
   const peerConnections = useRef({})
   const localVideoRef = useRef(null)
   const currentZoneRef = useRef(null)
+  const otherPlayersRef = useRef(new Map())
 
   useEffect(() => {
     const config = {
@@ -79,7 +81,6 @@ export default function OfficeGame() {
 
     let player
     let cursors
-    const otherPlayers = new Map()
     const zones = []
     const furniture = []
 
@@ -87,17 +88,17 @@ export default function OfficeGame() {
       this.load.image('avatar', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAGMSURBVHgB7VZBUsJAEOzZzfIGfoF+QX1B8oQUj+YH+gMO3tQf4A/kBxBP6g8SfyBvUCucZHfHZA0JkAQSU8WjXbU1yc7OTk9PT4BFixYtEth7f+9rMtIU6HoAOAHAGQHtAWCKgMdENA6ePj/Yc0IA9JzWZwBHhQMRjYg4CJ4/RvnxXIDu9XXHWDsgAHfZBwGGxtBdNBpNl2OLALre9xkCXhZmTxiFYXgRj+cCdK9uDo2lFyK4zOYJ4p9REIycAMoQwNBbMq+wl8LO0PNOiWjgbKGloeA4m0yw7wTo9TzX0NuKcLgYTwXoXfk9g/SaEiDgcxAEfbVfCdDtet+I9JISoO1wODxTe1a8RNrQVqmjHYt3YbkeEjmXzNtKAGV/BdB2vV7/Ru1rAZQlwM3GBMgWYGMC/P0lsEg3xthTpY8iaLtMgFUOLBNAWQLYTQmgTAHsRgRQtgDKFkDZAihbAGULoGwBlC2AsgVQtgDKFkDZAihbAGULoGwBlC2AsgVQtgDKFkDZAihbgBYtWvwv/ACePbx0qBd0YAAAAABJRU5ErkJggg==')
     }
 
-   
     function createFurniture(scene, x, y, width, height, color, type) {
-        const item = scene.add.rectangle(x, y, width, height, color)
-        item.setStrokeStyle(2, 0x000000)
-        furniture.push(item)
-        return item
-      }
+      const item = scene.add.rectangle(x, y, width, height, color)
+      item.setStrokeStyle(2, 0x000000)
+      furniture.push(item)
+      return item
+    }
+
     function create() {
-        this.add.rectangle(400, 300, 780, 580, 0xE0E0E0).setStrokeStyle(4, 0x333333)      
+      this.add.rectangle(400, 300, 780, 580, 0xE0E0E0).setStrokeStyle(4, 0x333333)      
       
-    const zoneData = [
+      const zoneData = [
         { 
           x: 50, y: 50, width: 200, height: 150, 
           name: 'Meeting Room',
@@ -175,20 +176,13 @@ export default function OfficeGame() {
         this.add.circle(plant.x, plant.y, plant.radius, 0x2ECC71)
       })
   
-    //   player = this.add.circle(400, 300, 16, 0xFF0000)
-    //   this.physics.add.existing(player)
-    //   player.body.setCollideWorldBounds(true)
-      
-      cursors = this.input.keyboard.createCursorKeys()
-  
-      
       player = this.physics.add.sprite(400, 300, 'avatar')
       player.setDisplaySize(32, 32)
       player.setCollideWorldBounds(true)
       furniture.forEach(item => {
         this.physics.add.existing(item, true)
         this.physics.add.collider(player, item)
-    })
+      })
       
       const nameLabel = this.add.text(400, 320, userName, {
         fontSize: '14px',
@@ -201,25 +195,13 @@ export default function OfficeGame() {
       
       cursors = this.input.keyboard.createCursorKeys()
 
-      socketRef.current = io('http://localhost:4000', {
-        query: { userName }
-      })
-
-      socketRef.current.on('connect', () => {
-        console.log('Connected to server')
-        socketRef.current.emit('set-initial-position', { 
-          x: player.x, 
-          y: player.y,
-          userName 
-        })
-      })
-
       socketRef.current.on('update-positions', (positions) => {
         Object.entries(positions).forEach(([id, pos]) => {
           if (id !== socketRef.current.id) {
-            if (!otherPlayers.has(id)) {
-              const newPlayer = this.add.sprite(pos.x, pos.y, 'avatar')
-              newPlayer.setDisplaySize(32, 32)
+            let otherPlayer = otherPlayersRef.current.get(id)
+            if (!otherPlayer) {
+              otherPlayer = this.add.sprite(pos.x, pos.y, 'avatar')
+              otherPlayer.setDisplaySize(32, 32)
               
               const newNameLabel = this.add.text(pos.x, pos.y + 20, pos.userName || 'Anonymous', {
                 fontSize: '14px',
@@ -228,36 +210,30 @@ export default function OfficeGame() {
               })
               newNameLabel.setOrigin(0.5, 0)
               
-              newPlayer.nameLabel = newNameLabel
-              otherPlayers.set(id, newPlayer)
+              otherPlayer.nameLabel = newNameLabel
+              otherPlayersRef.current.set(id, otherPlayer)
             } else {
-              const existingPlayer = otherPlayers.get(id)
-              if (existingPlayer) {
-                existingPlayer.setPosition(pos.x, pos.y)
-                existingPlayer.nameLabel.setPosition(pos.x, pos.y + 20)
-              }
+              otherPlayer.setPosition(pos.x, pos.y)
+              otherPlayer.nameLabel.setPosition(pos.x, pos.y + 20)
             }
           }
         })
-      })
 
-      socketRef.current.on('user-left', ({ userId }) => {
-        if (otherPlayers.has(userId)) {
-          const player = otherPlayers.get(userId)
-          player.nameLabel.destroy()
-          player.destroy()
-          otherPlayers.delete(userId)
+        // Calculate nearby users
+        const currentUser = positions[socketRef.current.id]
+        if (currentUser) {
+          const nearby = Object.entries(positions)
+            .filter(([id, pos]) => id !== socketRef.current.id)
+            .filter(([id, pos]) => {
+              const distance = Math.sqrt(
+                Math.pow(currentUser.x - pos.x, 2) + Math.pow(currentUser.y - pos.y, 2)
+              )
+              return distance <= 100 // Adjust this value to change the "nearby" threshold
+            })
+            .map(([id, pos]) => ({ id, userName: pos.userName }))
+          setNearbyUsers(nearby)
         }
-        handleUserDisconnected(userId)
       })
-
-      socketRef.current.on('chat-message', ({ userId, userName, message }) => {
-        setChatMessages(prev => [...prev, { userId, userName, message, timestamp: new Date() }])
-      })
-
-      socketRef.current.on('offer', handleOffer)
-      socketRef.current.on('answer', handleAnswer)
-      socketRef.current.on('ice-candidate', handleNewICECandidateMsg)
     }
 
     function update() {
@@ -314,83 +290,13 @@ export default function OfficeGame() {
 
     gameRef.current = new Phaser.Game(config)
     
-
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect()
-      }
       if (gameRef.current) {
         gameRef.current.destroy(true)
       }
-      stopVideoChat()
     }
   }, [userName, toast])
 
-  const FurnitureIcon = ({ type }) => {
-    switch (type) {
-      case 'Chair':
-        return <FaChair />
-      case 'Table':
-      case 'Desk':
-        return <FaTable />
-      case 'Sofa':
-        return <FaCouch />
-      case 'Coffee Table':
-        return <FaCoffee />
-      case 'Desk Pod':
-        return <FaDesktop />
-      case 'Whiteboard':
-        return <FaChalkboard />
-      default:
-        return null
-    }
-  }
-  
-  const FurnitureOverlay = () => {
-    const furnitureData = [
-      { x: 125, y: 100, type: 'Table' },
-      { x: 85, y: 80, type: 'Chair' },
-      { x: 165, y: 80, type: 'Chair' },
-      { x: 85, y: 120, type: 'Chair' },
-      { x: 165, y: 120, type: 'Chair' },
-      { x: 230, y: 75, type: 'Whiteboard' },
-      { x: 350, y: 100, type: 'Desk' },
-      { x: 350, y: 80, type: 'Chair' },
-      { x: 450, y: 100, type: 'Desk' },
-      { x: 450, y: 80, type: 'Chair' },
-      { x: 600, y: 100, type: 'Sofa' },
-      { x: 700, y: 100, type: 'Coffee Table' },
-      { x: 150, y: 300, type: 'Desk Pod' },
-      { x: 150, y: 280, type: 'Chair' },
-      { x: 350, y: 300, type: 'Desk Pod' },
-      { x: 350, y: 280, type: 'Chair' },
-      { x: 550, y: 300, type: 'Desk Pod' },
-      { x: 550, y: 280, type: 'Chair' },
-      { x: 150, y: 450, type: 'Desk Pod' },
-      { x: 150, y: 430, type: 'Chair' },
-      { x: 350, y: 450, type: 'Desk Pod' },
-      { x: 350, y: 430, type: 'Chair' },
-      { x: 550, y: 450, type: 'Desk Pod' },
-      { x: 550, y: 430, type: 'Chair' }
-    ]
-    return (
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-          {furnitureData.map((item, index) => (
-            <motion.div
-              key={index}
-              className="absolute text-gray-700"
-              style={{ left: item.x, top: item.y }}
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <FurnitureIcon type={item.type} />
-            </motion.div>
-          ))}
-        </div>
-      )
-    }
-  
   const startVideoChat = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -402,9 +308,8 @@ export default function OfficeGame() {
         localVideoRef.current.srcObject = stream
       }
 
-      Object.keys(remoteStreams).forEach(userId => {
-        createPeerConnection(userId, stream)
-      })
+      // Notify other users that you're ready for video chat
+      socketRef.current.emit('ready-for-video', { userId: socketRef.current.id, userName })
     } catch (error) {
       console.error('Error accessing media devices:', error)
       toast({
@@ -413,15 +318,17 @@ export default function OfficeGame() {
         variant: 'destructive',
       })
     }
-  }, [remoteStreams, toast])
+  }, [userName, toast])
 
-  const createPeerConnection = useCallback((userId, stream) => {
+  const createPeerConnection = useCallback((userId, initiator = false) => {
     try {
       const peerConnection = new RTCPeerConnection(ICE_SERVERS)
       
-      stream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, stream)
-      })
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream)
+        })
+      }
 
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
@@ -443,46 +350,32 @@ export default function OfficeGame() {
 
       peerConnections.current[userId] = peerConnection
 
-      peerConnection.createOffer().then(offer => {
-        return peerConnection.setLocalDescription(offer)
-      }).then(() => {
-        socketRef.current.emit('offer', {
-          to: userId,
-          offer: peerConnection.localDescription
+      if (initiator) {
+        peerConnection.createOffer().then(offer => {
+          return peerConnection.setLocalDescription(offer)
+        }).then(() => {
+          socketRef.current.emit('offer', {
+            to: userId,
+            offer: peerConnection.localDescription
+          })
+        }).catch(err => {
+          console.error('Error creating offer:', err)
         })
-      }).catch(err => {
-        console.error('Error creating offer:', err)
-      })
+      }
 
       return peerConnection
     } catch (err) {
       console.error('Error creating peer connection:', err)
       return null
     }
-  }, [])
+  }, [localStream])
 
   const handleOffer = useCallback(async ({ from, offer }) => {
     try {
       let peerConnection = peerConnections.current[from]
       
       if (!peerConnection) {
-        peerConnection = new RTCPeerConnection(ICE_SERVERS)
-        peerConnections.current[from] = peerConnection
-
-        peerConnection.ontrack = (event) => {
-          if (event.streams && event.streams[0]) {
-            setRemoteStreams(prev => ({
-              ...prev,
-              [from]: event.streams[0]
-            }))
-          }
-        }
-
-        if (localStream) {
-          localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream)
-          })
-        }
+        peerConnection = createPeerConnection(from)
       }
 
       await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
@@ -496,7 +389,7 @@ export default function OfficeGame() {
     } catch (err) {
       console.error('Error handling offer:', err)
     }
-  }, [localStream])
+  }, [createPeerConnection])
 
   const handleAnswer = useCallback(({ from, answer }) => {
     const peerConnection = peerConnections.current[from]
@@ -539,6 +432,14 @@ export default function OfficeGame() {
       newUsers.delete(userId)
       return newUsers
     })
+    setNearbyUsers(prev => prev.filter(user => user.id !== userId))
+
+    const otherPlayer = otherPlayersRef.current.get(userId)
+    if (otherPlayer) {
+      otherPlayer.nameLabel.destroy()
+      otherPlayer.destroy()
+      otherPlayersRef.current.delete(userId)
+    }
   }, [])
 
   const sendMessage = (e) => {
@@ -551,6 +452,58 @@ export default function OfficeGame() {
       setInputMessage('')
     }
   }
+
+  useEffect(() => {
+    socketRef.current = io('http://localhost:4000', {
+      query: { userName }
+    })
+
+    socketRef.current.on('connect', () => {
+      console.log('Connected to server')
+      socketRef.current.emit('set-initial-position', { 
+        x: 400, 
+        y: 300,
+        userName 
+      })
+    })
+
+    socketRef.current.on('user-joined', ({ userId, userName }) => {
+      setOnlineUsers(prev => new Set(prev).add(userId))
+      toast({
+        title: 'User Joined',
+        description: `${userName} has joined the office`,
+        duration: 3000,
+      })
+    })
+
+    socketRef.current.on('user-left', ({ userId, userName }) => {
+      handleUserDisconnected(userId)
+      toast({
+        title: 'User Left',
+        description: `${userName} has left the office`,
+        duration: 3000,
+      })
+    })
+
+    socketRef.current.on('chat-message', ({ userId, userName, message }) => {
+      setChatMessages(prev => [...prev, { userId, userName, message, timestamp: new Date() }])
+    })
+
+    socketRef.current.on('offer', handleOffer)
+    socketRef.current.on('answer', handleAnswer)
+    socketRef.current.on('ice-candidate', handleNewICECandidateMsg)
+
+    socketRef.current.on('ready-for-video', ({ userId, userName }) => {
+      createPeerConnection(userId, true)
+    })
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+      }
+      stopVideoChat()
+    }
+  }, [handleOffer, handleAnswer, handleNewICECandidateMsg, handleUserDisconnected, userName, toast, createPeerConnection, stopVideoChat])
 
   useEffect(() => {
     startVideoChat()
@@ -596,6 +549,42 @@ export default function OfficeGame() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Nearby Users
+              </CardTitle>
+              <Badge variant="secondary" className="font-normal">
+                {nearbyUsers.length} nearby
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-24">
+              {nearbyUsers.map(user => (
+                <div key={user.id} className="flex items-center gap-2 mb-2">
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback>{user.userName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{user.userName}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      createPeerConnection(user.id, true)
+                    }}
+                  >
+                    <Video className="w-4 h-4 mr-2" />
+                    Call
+                  </Button>
+                </div>
+              ))}
+            </ScrollArea>
           </CardContent>
         </Card>
 

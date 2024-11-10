@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-const Game = dynamic(() => import('../../components/Game'), { ssr: false })
+const Game = dynamic(() => import('../../components/MultiPlayer'), { ssr: false })
 
 export default function Home() {
   const [username, setUsername] = useState('')

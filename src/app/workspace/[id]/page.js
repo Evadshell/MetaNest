@@ -86,9 +86,9 @@ export default async function WorkspacePage({ params }) {
           />
         </div>
         <div className="w-3/4 bg-gray-200 p-6">
-          <div className="h-full bg-white rounded-lg shadow-lg flex items-center justify-center">
+          
           <OfficeGame />
-          </div>
+         
         </div>
       </div>
     );

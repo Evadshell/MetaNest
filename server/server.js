@@ -22,7 +22,10 @@ io.on('connection', (socket) => {
     users.set(socket.id, position);
     io.emit('update-positions', Object.fromEntries(users));
   });
-
+socket.on('ready-for-video', () => {
+  // Notify all other users that this user is ready for video
+  socket.broadcast.emit('ready-for-video', { userId: socket.id });
+});
   socket.on('move', (position) => {
     console.log('User moved:', socket.id, position);
     users.set(socket.id, position);
