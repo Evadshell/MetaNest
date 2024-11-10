@@ -153,7 +153,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
       <CursorTrail />
       <header className="p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">WorkVerse</h1>
+        <h1 className="text-2xl font-bold">MetaNest</h1>
         <nav>
           <Button variant="ghost" className="mr-2">Features</Button>
           <Button variant="ghost" className="mr-2">Pricing</Button>
@@ -169,7 +169,7 @@ export default function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            Welcome to WorkVerse
+            Welcome to MetaNest
           </motion.h1>
           <motion.p
             className="text-xl mb-8"
@@ -213,7 +213,7 @@ export default function LandingPage() {
         </section>
 
         <section>
-          <h2 className="text-3xl font-bold text-center mb-8">Join WorkVerse Today</h2>
+          <h2 className="text-3xl font-bold text-center mb-8">Join MetaNest Today</h2>
           <div className="text-center">
             <p className="mb-4">Ready to revolutionize your remote work experience?</p>
             <Button size="lg" asChild>
@@ -224,7 +224,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="mt-16 py-8 bg-gray-800 text-center">
-        <p>&copy; 2024 WorkVerse. All rights reserved.</p>
+        <p>&copy; 2024 MetaNest. All rights reserved.</p>
       </footer>
     </div>
   )

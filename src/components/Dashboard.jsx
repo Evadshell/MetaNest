@@ -14,6 +14,8 @@ import { Github, PlusCircle, Settings, User, Users } from "lucide-react";
 import { ClientDashboard } from "@/components/ClientDashboard";
 import { JoinWorkspaceModal } from "./JoinWorkSpaceModal";
 import { JoinWorkspaceButton } from "./JoinWorkSpaceButton";
+import { useAuth0 } from "@auth0/auth0-react";
+import { AccountLinkButton } from "./LinkAccountButton";
 
 export default function Dashboard({ user }) {
   const particlesInit = useCallback(async (engine) => {
@@ -24,7 +26,20 @@ export default function Dashboard({ user }) {
   const [joinedWorkspaces, setJoinedWorkspaces] = useState([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-
+  const { isAuthenticated, loginWithPopup, getAccessTokenSilently } =
+    useAuth0();
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+  const [isGitHubLinked, setIsGitHubLinked] = useState(false);
+  const handleLinkAccount = async (provider) => {
+    try {
+      await linkAccount(provider);
+      // Refresh the page to update the UI
+      window.location.reload();
+    } catch (error) {
+      console.error("Link account error:", error);
+      alert(error.message || "Failed to link account");
+    }
+  };
   useEffect(() => {
     const fetchWorkspaces = async () => {
       const res = await fetch("/api/workspace");
@@ -34,9 +49,30 @@ export default function Dashboard({ user }) {
         setJoinedWorkspaces(data.workspaces.filter(w => w.ownerId !== user.id));
       }
     };
+    const checkLinkedAccounts = async () => {
+      const token = await getAccessTokenSilently();
+      const res = await fetch(
+        `https://${process.env.NEXT_PUBLIC_AUTH0_DOMAIN}/api/v2/users/${user.sub}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const userProfile = await res.json();
+
+      setIsGoogleLinked(
+        userProfile.identities.some((id) => id.provider === "google-oauth2")
+      );
+      setIsGitHubLinked(
+        userProfile.identities.some((id) => id.provider === "github")
+      );
+    };
 
     fetchWorkspaces();
-  }, [user.id]);
+    if (isAuthenticated) checkLinkedAccounts();
+    fetchWorkspaces();
+  }, [user.id,isAuthenticated, getAccessTokenSilently]);
 
   const handleJoinWorkspace = () => {
     // Implement the logic to join a workspace
@@ -74,24 +110,17 @@ export default function Dashboard({ user }) {
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </Button>
-            {/* <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start">
-                  <Users className="mr-2 h-4 w-4" /> Join Workspace
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Join a Workspace</DialogTitle>
-                </DialogHeader>
-                <Input
-                  placeholder="Enter Workspace ID"
-                  value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
-                />
-                <Button onClick={handleJoinWorkspace}>Join</Button>
-              </DialogContent>
-            </Dialog> */}
+            <AccountLinkButton
+              provider="google-oauth2"
+              isLinked={isGoogleLinked}
+              onLink={() => setIsGoogleLinked(true)}
+            />
+
+            <AccountLinkButton
+              provider="github"
+              isLinked={isGitHubLinked}
+              onLink={() => setIsGitHubLinked(true)}
+            />
             <JoinWorkspaceButton />
           </nav>
         </div>

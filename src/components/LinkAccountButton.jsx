@@ -1,46 +1,59 @@
-import React, { useState } from 'react';
+// components/AccountLinkButton.jsx
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Github, Mail, Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { linkAccount } from '@/lib/authHelper';
 
-const LinkAccountButton = () => {
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+const providerIcons = {
+  github: Github,
+  'google-oauth2': Mail,
+};
 
-  const handleLinkAccount = async () => {
-    setLoading(true);
-    setMessage('');
+const providerNames = {
+  github: 'GitHub',
+  'google-oauth2': 'Google',
+};
 
+export function AccountLinkButton({ provider, isLinked, onLink }) {
+  const [isLinking, setIsLinking] = useState(false);
+  const Icon = providerIcons[provider];
+
+  const handleLink = async () => {
+    if (isLinked) return;
+    setIsLinking(true);
+    
     try {
-      // Fetch the secondary account ID token (this could be obtained after a separate login flow)
-      const secondaryIdToken = prompt("Enter the ID Token of the secondary account:");
-
-      const response = await fetch('/api/link-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secondaryIdToken })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessage('Accounts linked successfully!');
-      } else {
-        setMessage(`Error: ${data.error}`);
-      }
+      await linkAccount(provider);
+      toast.success(`Successfully linked ${providerNames[provider]} account`);
+      onLink?.(true);
     } catch (error) {
-      setMessage('Failed to link accounts.');
-      console.error(error);
+      toast.error('Failed to link account. Please try again.');
     } finally {
-      setLoading(false);
+      setIsLinking(false);
     }
   };
 
   return (
-    <div>
-      <button onClick={handleLinkAccount} disabled={loading}>
-        {loading ? 'Linking...' : 'Link Another Account'}
-      </button>
-      {message && <p>{message}</p>}
-    </div>
+    <Button
+      variant={isLinked ? 'secondary' : 'ghost'}
+      className="w-full justify-start mb-4 relative"
+      onClick={handleLink}
+      disabled={isLinking}
+    >
+      {isLinking ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <Icon className="mr-2 h-4 w-4" />
+      )}
+      {isLinked ? (
+        <>
+          Connected to {providerNames[provider]}
+          <Check className="h-4 w-4 absolute right-4" />
+        </>
+      ) : (
+        `Link ${providerNames[provider]} Account`
+      )}
+    </Button>
   );
-};
-
-export default LinkAccountButton;
+}
