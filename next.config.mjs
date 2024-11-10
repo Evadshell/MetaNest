@@ -5,7 +5,7 @@ dotenv.config();
 const nextConfig = {
   // Image configuration
   images: {
-    domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com'],
+    domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com','s.gravatar.com'],
   },
 
   // Webpack configuration for canvas
